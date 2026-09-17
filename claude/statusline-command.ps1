@@ -20,18 +20,18 @@ $CYAN = "`e[36m"
 function Get-ShortPath {
     $cwd = Get-Location
     $home = [System.IO.Path]::Combine($env:USERPROFILE)
-    
+
     if ($cwd.Path.StartsWith($home)) {
         $short = "~" + $cwd.Path.Substring($home.Length)
     } else {
         $short = $cwd.Path
     }
-    
+
     # Truncate if too long
     if ($short.Length -gt 30) {
         $short = "..." + $short.Substring($short.Length - 27)
     }
-    
+
     return $short
 }
 
@@ -43,14 +43,14 @@ function Get-GitBranch {
             return $branch
         }
     } catch { }
-    
+
     return $null
 }
 
 # Pick a color for a percentage
 function Get-ColorForPercentage {
     param([int]$Percentage)
-    
+
     if ($Percentage -lt 70) {
         return $GREEN
     } elseif ($Percentage -lt 90) {
@@ -63,10 +63,10 @@ function Get-ColorForPercentage {
 # 10-character bar for a percentage
 function Get-PercentageBar {
     param([int]$Percentage)
-    
+
     $percentage = [Math]::Min([Math]::Max($Percentage, 0), 100)
     $filled = [Math]::Floor($percentage / 10)
-    
+
     $bar = ""
     for ($i = 0; $i -lt $filled; $i++) {
         $bar += "█"
@@ -74,7 +74,7 @@ function Get-PercentageBar {
     for ($i = $filled; $i -lt 10; $i++) {
         $bar += "░"
     }
-    
+
     return $bar
 }
 

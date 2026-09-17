@@ -63,7 +63,7 @@ If you move or re-clone it, run `just install --force` to repoint the links, bec
 Nothing is copied into the agent tools.
 `just install` only creates symlinks back into this clone, so editing a file here changes what every tool reads, and deleting the clone breaks those links rather than leaving stale copies behind.
 
-### Windows Setup with PowerShell
+### Windows Setup With PowerShell
 
 For Windows with PowerShell and GitHub Copilot in VS Code, follow the [Windows Setup Guide](WINDOWS_SETUP.md):
 
