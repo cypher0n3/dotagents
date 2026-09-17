@@ -3,7 +3,6 @@
 ## General Instructions
 
 - Look for and read repo-local `meta.md` file if it exists.
-- Look for and read repo-local `.github/copilot-instructions.md` if it exists.
 - Look for and read repo-local `AGENTS.override.md` if it exists.
 - For structured data outputs that are saved to a file or meant to be read/interpreted by humans (even in stdout for example), ALWAYS prefer YAML over JSON, NDJSON, etc. whenever possible.
 

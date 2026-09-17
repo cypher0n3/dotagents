@@ -94,7 +94,7 @@ They are still held to one sentence per line so that edits produce readable diff
 
 ## Portability Across Agent Tools
 
-The same directory is read by Claude Code, Codex, Cursor, Gemini, and Grok through the symlinks that `just install` creates.
+The same directory is read by Claude Code, Codex, Cursor, Gemini, Grok, and GitHub Copilot in VS Code through the symlinks that `just install` creates.
 Write skills so that nothing breaks when a tool that lacks a given feature loads them.
 
 - Do not hardcode absolute paths, machine names, or a single tool's directory layout.

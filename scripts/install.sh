@@ -51,6 +51,7 @@ directory_targets=(
     "${HOME}/.claude/skills"
     "${HOME}/.cursor/skills"
     "${HOME}/.gemini/config/skills"
+    "${HOME}/.copilot/skills"
 )
 
 # Targets that receive one symlink per agent file. Only Claude Code reads this

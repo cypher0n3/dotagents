@@ -9,7 +9,7 @@
 
 These are my agent skills and instructions, kept in one place and shared across every agent tool I use.
 One directory under [`skills/`](skills/README.md) is one skill.
-Claude Code, Codex, Cursor, Gemini, and Grok all read that same directory through symlinks, so I edit a skill once and it takes effect everywhere the next time a session starts.
+Claude Code, Codex, Cursor, Gemini, Grok, and GitHub Copilot in VS Code all read that same directory through symlinks, so I edit a skill once and it takes effect everywhere the next time a session starts.
 One file under [`agents/`](agents/README.md) is one Claude Code subagent that preloads the skills its role needs, linked into `~/.claude/agents` the same way.
 
 They are personal and opinionated; see [Scope and Point of View](#scope-and-point-of-view) before adopting them wholesale.
@@ -63,13 +63,32 @@ If you move or re-clone it, run `just install --force` to repoint the links, bec
 Nothing is copied into the agent tools.
 `just install` only creates symlinks back into this clone, so editing a file here changes what every tool reads, and deleting the clone breaks those links rather than leaving stale copies behind.
 
+### Windows Setup with PowerShell
+
+For Windows with PowerShell and GitHub Copilot in VS Code, follow the [Windows Setup Guide](WINDOWS_SETUP.md):
+
+```powershell
+git clone https://github.com/cypher0n3/dotagents.git ~/.agents
+cd ~/.agents
+
+# Run installation script (no admin rights or Developer Mode required)
+.\scripts\install.ps1 -DryRun
+.\scripts\install.ps1
+
+# Run validation
+python .ci_scripts/validate_skills.py skills
+```
+
+The Windows installer links the same way without requiring administrator rights or Developer Mode: directory junctions for `skills/` and per-skill targets, and hard links (or a hash-checked copy, when the clone and home directory are on different drives) for single files.
+See [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for full details including troubleshooting.
+
 Use `just --list` to see every recipe.
 
 ## Installation Layout
 
 `just install` creates four kinds of link, because the agent tools disagree about what a skills directory is and about where global instructions live.
 
-- Whole-directory links, one symlink pointing at `skills/`: `~/.claude/skills`, `~/.cursor/skills`, and `~/.gemini/config/skills`.
+- Whole-directory links, one symlink pointing at `skills/`: `~/.claude/skills`, `~/.cursor/skills`, `~/.gemini/config/skills`, and `~/.copilot/skills`.
 - Per-agent links, one symlink per agent file inside `~/.claude/agents`.
   Only Claude Code reads this file format, so only its directory receives them, and linking file by file leaves any agent already sitting there untouched.
   Anything in that directory this repository does not provide is reported at the end of the run and never removed, so a renamed agent's dangling link is visible without putting your own agents at risk.
