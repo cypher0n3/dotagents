@@ -384,6 +384,26 @@ Removing a source role leaves a broken link that the installer reports and never
 Dry runs perform no writes or application startup, and repeated unchanged installations remain no-ops.
 The Linux/XDG CAI target does not imply Windows support.
 
+## Adding a Target
+
+The first implementation ships five targets: Claude Code, Codex, Cursor, Hermes, and CAI.
+Any later target is added in its own reviewed change, and none requires a change to role sources beyond listing the new target name in each role's `targets`.
+
+A change that adds a target includes all of the following:
+
+1. Evidence: the application's native agent or persona concept, file format, discovery locations, symlink handling, and each supported field, recorded under [Current Target Evidence](#current-target-evidence) with the application version or source revision that establishes it.
+2. A target profile, `agent_sources/targets/<target>.yaml`, with its native field allowlist, commented-key list, dropped presentation fields, override allowlist, `alias_list`, and inheritance form, added to [Target Field Allowlists](#target-field-allowlists).
+3. A template, `agent_sources/templates/<target>.md.j2`, or the target's native file extension when it does not read Markdown, and an output directory under `generated/`.
+4. Parser fixtures showing the application accepts every rendered file, including its commented-out keys, per [Migration and Validation](#migration-and-validation).
+5. Installer steps in both installers that follow [Installation Boundary](#installation-boundary): per-file links into a real directory the application owns, acting only when the application is present, a `--no-<target>-agents` switch and its PowerShell equivalent, and dry-run and broken-link reporting.
+6. Updates to the README, the draft or specification index, and any affected standards.
+
+A harness with no native agent or persona format is not a target.
+The generator does not approximate one by writing roles into global instruction files, because those load for every session rather than on demand.
+
+Gemini, Grok, and GitHub Copilot in VS Code already receive shared skills or instructions from the installer and are candidates for later targets.
+None is included until a change supplies the evidence above.
+
 ## Migration and Validation
 
 The first implementation ports all nine current roles in one change: coder, docs-writer, feature-author, planner, researcher, reviewer, reviewer-go, spec-author, and test-runner.
