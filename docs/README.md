@@ -8,6 +8,7 @@ The skills it distributes are indexed separately in [Skill Index](../skills/READ
 ## Contents
 
 - [Documentation Standards](docs_standards/README.md) - authoring standards for skills and Markdown in this repository.
+- [Draft Specifications](draft_specs/README.md) - proposed designs that do not change current behavior.
 - [`../meta.md`](../meta.md) - orientation for agents, and this repository's boundaries.
 - [`../AGENTS.md`](../AGENTS.md) - my global instructions for coding agents.
 - [`../AGENTS.override.md`](../AGENTS.override.md) - agent instructions specific to this repository.

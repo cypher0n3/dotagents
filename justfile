@@ -46,7 +46,10 @@ install-markdownlint:
     ln -sfn "$REPO_DIR/markdownlint-rules" "$RULES_DIR"
     echo "Custom markdownlint rules installed in $RULES_DIR."
 
-# Lint Markdown and apply automatic fixes. Pass paths or omit for the whole repo.
+# Lint Markdown and apply automatic fixes, or only check under CI. Pass paths or
+# omit for the whole repo.
+# The whole-repo run skips symlinked entries in skills/, such as locally linked
+# system skills: their content is not ours, and --fix would rewrite the target.
 lint-md *PATHS:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -55,10 +58,20 @@ lint-md *PATHS:
         echo "Error: .markdownlint-rules missing. Run: just install-markdownlint"
         exit 1
     fi
+    # Fix locally; under CI (the CI environment variable is set), only check.
+    fix=(--fix)
+    case "$(printf '%s' "${CI:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
+        "" | 0 | false) ;;
+        *) fix=() ;;
+    esac
     if [ -z "{{ PATHS }}" ]; then
-        markdownlint-cli2 --fix '**/*.md'
+        excludes=()
+        while IFS= read -r link; do
+            excludes+=("!${link}/**" "!${link}")
+        done < <(find skills -mindepth 1 -maxdepth 1 -type l | sort)
+        markdownlint-cli2 "${fix[@]}" '**/*.md' "${excludes[@]}"
     else
-        markdownlint-cli2 --fix {{ PATHS }}
+        markdownlint-cli2 "${fix[@]}" {{ PATHS }}
     fi
 
 # Validate skill frontmatter, naming, and agent manifests.

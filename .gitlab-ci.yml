@@ -31,9 +31,8 @@ check:docs:
     - npm install -g markdownlint-cli2@0.23.3
     - just install-markdownlint
   script:
-    # lint-md applies fixes, so fail when it had anything to fix.
+    # lint-md only checks under CI, so anything fixable fails here.
     - just lint-md
-    - git diff --exit-code
 
 check:shell:
   stage: check

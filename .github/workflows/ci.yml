@@ -51,12 +51,9 @@ jobs:
         run: |
           npm install -g markdownlint-cli2@0.23.3
           just install-markdownlint
-      # lint-md applies fixes, so fail when it had anything to fix.
+      # lint-md only checks under CI, so anything fixable fails here.
       - name: Lint Markdown
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          just lint-md
-          git diff --exit-code
+        run: just lint-md
 
   shell:
     name: Lint shell scripts

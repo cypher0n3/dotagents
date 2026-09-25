@@ -16,8 +16,9 @@
 # syncs vendored ones into ~/.claude/skills), and a symlink to skills/ as a
 # whole would land that content in this repository. An older install that
 # linked skills/ as a whole is migrated to a real directory. A skills/ entry
-# without a SKILL.md is not a skill and is never linked. Links to skills that
-# no longer exist are reported rather than removed.
+# without a SKILL.md is not a skill and is never linked; it is reported, since
+# it is usually content a tool wrote through that older link. Links to skills
+# that no longer exist are reported rather than removed.
 #
 # The agents are linked one file at a time for the same reason:
 # ~/.claude/agents is usually a real directory that already holds agents
@@ -25,7 +26,8 @@
 # itself would refuse to touch it and install nothing. Linking file by file
 # cannot clean up after itself, so anything else found in that directory,
 # including a link left dangling by a renamed agent, is reported rather than
-# removed.
+# removed. An older install that linked agents/ as a whole is migrated to a real
+# directory the same way skills are.
 #
 # Existing paths are never replaced unless --force is given, and a symlink that
 # already points at the right place is reported as already installed.
@@ -184,17 +186,18 @@ link_one() {
     fi
 }
 
-# prepare_skill_target <target_dir>
-# Make the target a real directory. A symlink to this repository's skills/ is
-# the layout an older install created, so it is replaced without --force. A
-# symlink anywhere else is the user's own and needs --force. Returns non-zero
-# when the target must be left alone.
-prepare_skill_target() {
-    local target="$1"
+# prepare_real_dir <target_dir> <source_dir>
+# Make the target a real directory. A symlink to the matching source directory
+# in this repository (skills/ or agents/) is the layout an older install
+# created, so it is replaced without --force. A symlink anywhere else is the
+# user's own and needs --force. Returns non-zero when the target must be left
+# alone.
+prepare_real_dir() {
+    local target="$1" source="$2"
 
     if [ -L "$target" ]; then
-        if [ "$(readlink -f "$target")" = "$(readlink -f "$skills_dir")" ]; then
-            echo "  migrate: ${target} links the whole skills directory; replacing it with a real directory"
+        if [ "$(readlink -f "$target")" = "$(readlink -f "$source")" ]; then
+            echo "  migrate: ${target} links the whole $(basename "$source") directory; replacing it with a real directory"
         elif [ "$force" -eq 1 ]; then
             echo "  migrate: ${target} points at $(readlink "$target"); replacing it with a real directory"
         else
@@ -238,7 +241,7 @@ report_stale_skills() {
 link_skills() {
     local target="$1" skill_path skill_name
 
-    prepare_skill_target "$target" || return 0
+    prepare_real_dir "$target" "$skills_dir" || return 0
     if [ "$dry_run" -eq 1 ] && [ -L "$target" ]; then
         echo "  would link each skill into ${target}"
         return 0
@@ -251,16 +254,41 @@ link_skills() {
     report_stale_skills "$target"
 }
 
+# report_non_skill_entries
+# Report directories in skills/ that have no SKILL.md, and remove nothing. A
+# tool that wrote through a whole-directory link from an older install leaves
+# its content here, and migrating the link does not move it back out.
+report_non_skill_entries() {
+    local entry
+    local -a extra=()
+
+    for entry in "$skills_dir"/*/; do
+        [ -f "${entry}SKILL.md" ] || extra+=("$(basename "$entry")")
+    done
+
+    if [ "${#extra[@]}" -gt 0 ]; then
+        echo "  note: non-skill director(ies) in ${skills_dir}, left in place for you to remove:" >&2
+        for entry in "${extra[@]}"; do
+            echo "    extra: ${entry}" >&2
+        done
+    fi
+}
+
 echo "Source: ${skills_dir}"
 
 echo "Skill targets:"
 for target in "${per_skill_targets[@]}"; do
     link_skills "$target"
 done
+report_non_skill_entries
 
 echo "Claude agents:"
 for target in "${per_agent_targets[@]}"; do
-    [ -d "$target" ] || run mkdir -p "$target"
+    prepare_real_dir "$target" "$agents_dir" || continue
+    if [ "$dry_run" -eq 1 ] && [ -L "$target" ]; then
+        echo "  would link each agent into ${target}"
+        continue
+    fi
     for agent_path in "$agents_dir"/*.md; do
         agent_name="$(basename "$agent_path")"
         if [ "$agent_name" = "README.md" ]; then

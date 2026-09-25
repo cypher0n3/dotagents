@@ -16,8 +16,10 @@
       - Skills get one junction per skill inside a real directory each tool
         owns, so a skill a tool writes there itself never lands in this clone.
         An older install that linked skills/ as a whole is migrated to a real
-        directory, a skills/ entry without a SKILL.md is never linked, and a
-        link to a skill that no longer exists is reported and left in place.
+        directory. A skills/ entry without a SKILL.md is never linked; it is
+        reported, since it is usually content a tool wrote through that older
+        link. A link to a skill that no longer exists is reported and left in
+        place.
       - Single-file targets use a hard link on the same volume, which also needs
         no elevation. When the clone and the home directory are on different
         volumes (a hard link is impossible there) the file is copied instead.
@@ -268,13 +270,17 @@ function Report-ExtraAgents {
     }
 }
 
-# Prepare-SkillTarget <target-dir>
+# Prepare-RealDir <target-dir> <source-dir>
 # Make the target a real directory and return 'ready', 'dry-migrate' (a dry run
 # that would replace a link, so the directory does not exist yet), or 'skip'.
-# A link to this repository's skills/ is the layout an older install created,
-# so it is replaced without -Force. A link anywhere else needs -Force.
-function Prepare-SkillTarget {
-    param([Parameter(Mandatory)][string]$TargetDir)
+# A link to the matching source directory in this repository (skills/ or
+# agents/) is the layout an older install created, so it is replaced without
+# -Force. A link anywhere else needs -Force.
+function Prepare-RealDir {
+    param(
+        [Parameter(Mandatory)][string]$TargetDir,
+        [Parameter(Mandatory)][string]$SourceDir
+    )
     $target = Expand-Home $TargetDir
     $migrating = $false
 
@@ -282,8 +288,8 @@ function Prepare-SkillTarget {
         $item = Get-Item -LiteralPath $target -Force
         $existing = Get-LinkTarget $item
         if ($existing) {
-            if ($existing -ieq (Resolve-Full $skillsDir)) {
-                Write-Detail "migrate: $target links the whole skills directory; replacing it with a real directory"
+            if ($existing -ieq (Resolve-Full $SourceDir)) {
+                Write-Detail "migrate: $target links the whole $(Split-Path -Leaf $SourceDir) directory; replacing it with a real directory"
             } elseif ($Force) {
                 Write-Detail "migrate: $target points at $existing; replacing it with a real directory"
             } else {
@@ -582,7 +588,7 @@ Write-Step 'Skill targets:'
 $skillDirs = Get-ChildItem -LiteralPath $skillsDir -Directory |
     Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'SKILL.md') -PathType Leaf }
 foreach ($target in $perSkillTargets) {
-    $state = Prepare-SkillTarget $target
+    $state = Prepare-RealDir $target $skillsDir
     if ($state -eq 'skip') { continue }
     if ($state -eq 'dry-migrate') {
         Write-Detail "would link each skill into $target"
@@ -593,11 +599,22 @@ foreach ($target in $perSkillTargets) {
     }
     Report-StaleSkills $target
 }
+# A tool that wrote through a whole-directory link from an older install
+# leaves its content in skills/; report it rather than removing it.
+Get-ChildItem -LiteralPath $skillsDir -Directory |
+    Where-Object { -not (Test-Path -LiteralPath (Join-Path $_.FullName 'SKILL.md') -PathType Leaf) } |
+    ForEach-Object { Write-Detail "note: non-skill directory left in place: $($_.Name)" }
 
 Write-Step 'Claude agents:'
 $agentFiles = Get-ChildItem -LiteralPath $agentsDir -Filter '*.md' |
     Where-Object { $_.Name -ne 'README.md' }
 foreach ($target in $perAgentTargets) {
+    $state = Prepare-RealDir $target $agentsDir
+    if ($state -eq 'skip') { continue }
+    if ($state -eq 'dry-migrate') {
+        Write-Detail "would link each agent into $target"
+        continue
+    }
     foreach ($agent in $agentFiles) {
         Install-FileLink $agent.FullName "$target/$($agent.Name)"
     }

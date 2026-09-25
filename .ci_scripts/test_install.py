@@ -543,6 +543,19 @@ class InstallSkillLinksTest(unittest.TestCase):
         for target in SKILL_TARGETS:
             self.assertFalse((self.home / target / "synced").exists(), target)
 
+    def test_content_written_through_migrated_link_is_reported_not_removed(self) -> None:
+        link = self.home / ".claude/skills"
+        link.parent.mkdir()
+        link.symlink_to(self.skills, target_is_directory=True)
+        # What the tool synced through the old whole-directory link.
+        (link / "synced").mkdir()
+        (link / "synced/manifest.json").write_text("{}\n", encoding="utf-8")
+        result = self.install()
+        self.assertTrue(link.is_dir() and not link.is_symlink())
+        self.assertIn("extra: synced", result.stderr)
+        self.assertTrue((self.skills / "synced/manifest.json").is_file())
+        self.assertNotIn("extra: alpha", result.stderr)
+
     def test_whole_directory_link_from_older_install_is_migrated(self) -> None:
         link = self.home / ".claude/skills"
         link.parent.mkdir()
@@ -553,6 +566,21 @@ class InstallSkillLinksTest(unittest.TestCase):
         # A skill the tool writes itself stays out of the repository.
         (link / "vendored").mkdir()
         self.assertFalse((self.skills / "vendored").exists())
+
+    def test_whole_agents_directory_link_from_older_install_is_migrated(self) -> None:
+        link = self.home / ".claude/agents"
+        link.parent.mkdir()
+        link.symlink_to(self.repo / "agents", target_is_directory=True)
+        result = self.install("--dry-run")
+        self.assertIn("would link each agent into", result.stdout)
+        self.assertTrue(link.is_symlink())
+        self.install()
+        self.assertTrue(link.is_dir() and not link.is_symlink())
+        self.assertEqual(sorted(p.name for p in link.iterdir()), ["helper.md"])
+        self.assertEqual((link / "helper.md").resolve(), (self.repo / "agents/helper.md").resolve())
+        # An agent the tool or user adds stays out of the repository.
+        (link / "local.md").write_text("Local\n", encoding="utf-8")
+        self.assertFalse((self.repo / "agents/local.md").exists())
 
     def test_foreign_directory_link_needs_force(self) -> None:
         elsewhere = self.home / "elsewhere"
