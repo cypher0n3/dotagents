@@ -1,0 +1,25 @@
+schema: 1
+name: hermes
+application:
+  name: Hermes Agent
+  checked: Hermes Agent v0.21.0
+  evidence:
+    - https://hermes-agent.nousresearch.com/docs/user-guide/features/personality/
+    - https://hermes-agent.nousresearch.com/docs/user-guide/features/delegation
+  notes:
+    - Has no agent file format; the closest concept is a personality under agent.personalities.<name> in config.yaml.
+    - A personality holds description and system_prompt and applies to the whole session once selected with /personality.
+    - A personality has no model, tool, sandbox, or skill field, so those are stated in an explainer at the start of system_prompt.
+format: hermes
+template: hermes.yaml.j2
+output: generated/hermes/personalities
+noun: personality
+model: {}
+readonly:
+  render: explainer
+tools:
+  render: explainer
+required_skills:
+  render: explainer
+suggested_skills:
+  render: explainer

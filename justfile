@@ -14,11 +14,50 @@ default:
 
 # Install the tooling the checks below need.
 setup: install-markdownlint
-    @echo "Setup complete. Run: just ci"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{ root_dir }}"
+    if command -v uv >/dev/null 2>&1; then
+        uv sync --locked --quiet --project tools/agentgen
+        echo "Agent generator environment ready in tools/agentgen/.venv."
+    else
+        echo "Warning: uv not found; just ci needs it to generate agents from agent_sources/."
+        echo "Install it: https://docs.astral.sh/uv/getting-started/installation/"
+    fi
+    echo "Setup complete. Run: just ci"
 
-# Local CI: everything that gates a merge in this repository.
-ci: docs-check validate-skills validate-agents validate-skills-spec test-python test-powershell lint-sh
+# Local CI: everything that gates a merge in this repository. Agents are
+# generated first, so every later check sees the regenerated files.
+ci: generate-agents docs-check validate-skills validate-agents validate-skills-spec test-python test-agentgen test-powershell lint-sh
     @:
+
+# Regenerate agents/ and generated/ from agent_sources/, or only check them under CI.
+generate-agents:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{ root_dir }}"
+    command -v uv >/dev/null 2>&1 || {
+        echo "Error: uv not found. Install it (https://docs.astral.sh/uv/getting-started/installation/) and retry."
+        exit 1
+    }
+    # Write locally; under CI (the CI environment variable is set), only check.
+    mode=()
+    case "$(printf '%s' "${CI:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
+        "" | 0 | false) ;;
+        *) mode=(--check) ;;
+    esac
+    uv run --locked --quiet --project tools/agentgen agentgen generate --root . "${mode[@]}"
+
+# Rewrite every generated file from agent_sources/, discarding hand edits, such as after a merge conflict.
+generate-agents-accept-source:
+    @cd "{{ root_dir }}" && uv run --locked --quiet --project tools/agentgen agentgen generate --root . --accept-source
+
+# Run the agent generator's unit tests in its locked environment.
+test-agentgen:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{ root_dir }}/tools/agentgen"
+    uv run --locked --quiet python -m unittest discover -s tests -t .
 
 # All documentation checks: Markdown lint plus internal link validation.
 docs-check: lint-md validate-doc-links
@@ -150,7 +189,7 @@ lint-sh:
     fi
     shellcheck scripts/*.sh claude/*.sh cursor/*.sh
 
-# Link the skills, Claude agents, and global AGENTS.md into ~/.claude, ~/.cursor, ~/.gemini, ~/.codex, and ~/.grok.
+# Link the skills, generated agents, and global AGENTS.md into each tool, and register Hermes skills and personalities.
 install *ARGS:
     @bash "{{ root_dir }}/scripts/install.sh" {{ ARGS }}
 
@@ -163,5 +202,5 @@ clean:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{ root_dir }}"
-    rm -rf .markdownlint-repo .markdownlint-rules .ci_scripts/__pycache__
+    rm -rf .markdownlint-repo .markdownlint-rules .ci_scripts/__pycache__ tools/agentgen/.venv
     echo "Removed local lint tooling and caches."

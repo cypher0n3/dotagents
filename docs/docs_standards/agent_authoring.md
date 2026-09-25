@@ -6,13 +6,22 @@ This document defines what a Claude Code subagent in this repository must contai
 It follows the [Claude Code subagent documentation](https://code.claude.com/docs/en/sub-agents) and adds this repository's own conventions on top of it.
 Every rule here is enforced by `just ci` unless the text says otherwise.
 
+The files under `agents/` are generated, together with the Codex, Cursor, Hermes, and CAI versions of each role, from role sources under [`agent_sources/`](../../agent_sources/README.md).
+Every rule below describes the generated Claude Code agent, and is met by editing the role's source: the frontmatter comes from `agent_sources/roles/<agent-name>.yaml` and the body from `agent_sources/prompts/<agent-name>.md`.
+[Shared Agent Templates](../specs/shared-agent-templates.md) specifies how each field maps to every tool.
+
 An agent is a role with a system prompt, a model, a tool allowance, and a set of preloaded skills.
 A skill is a rule set that any agent tool can load.
 Keep that division: an agent says who is acting and with what, and the skills it preloads say how.
 
 ## Directory Layout
 
-Each agent is one file, `agents/<agent-name>.md`, and the filename without its extension is the agent's address.
+Each agent is one generated file, `agents/<agent-name>.md`, and the filename without its extension is the agent's address.
+Its role source is `agent_sources/roles/<agent-name>.yaml`, and its body is `agent_sources/prompts/<agent-name>.md`.
+
+- Do not edit a generated file directly: `just ci` regenerates every agent first, and fails, naming the file and writing nothing, when a generated file was edited by hand.
+- Commit the regenerated files under `agents/` and `generated/`, with `generated/manifest.yaml`, in the same change as the source edit; hosted CI checks rather than regenerates.
+- After a merge conflict in generated files, resolve the sources and run `just generate-agents-accept-source`, which rewrites every generated file from the sources.
 Claude Code addresses the agent by that name, so renaming the file is a breaking change for anyone who has typed it into a workflow or a project-level override.
 
 - [`agents/README.md`](../../agents/README.md) is the index and must link every agent; `just validate-agents` fails when one is missing.
@@ -26,6 +35,8 @@ Agent names use lowercase kebab-case and read as a role: `reviewer`, `spec-autho
 ## Frontmatter Contract
 
 Every agent file opens with YAML frontmatter delimited by `---` lines.
+The role source supplies each field: `name` and `description` directly, `model` through `model.claude` or the `model.alias` the Claude profile maps, `color` through `presentation.claude.color`, `tools` through `restrictions.tools`, and `skills` through `skills.required`.
+The fields the generator does not render, such as `permissionMode` or `hooks`, cannot be set until the Claude target profile allows them.
 
 - `name` is required and must exactly match the filename without its extension.
 - `description` is required and is the routing text Claude Code uses to decide when to delegate to the agent.
@@ -106,6 +117,7 @@ An agent here must work in any repository it is started in.
 
 Run the full local gate before committing an agent change.
 
+- `just generate-agents` validates the role source and regenerates every agent from it.
 - `just validate-agents` checks frontmatter, naming, model, color, effort and tool values, preloaded skills, the body opening, comments, and the index.
-- `just lint-md agents/<agent-name>.md` applies Markdown fixes and reports what it cannot fix.
-- `just ci` runs every check that CI runs.
+- `just lint-md agent_sources/prompts/<agent-name>.md` lints the body; fix what it reports in the source, because a fix applied to a generated file is reported as a hand edit.
+- `just ci` runs every check that CI runs, starting with generation.

@@ -3,6 +3,8 @@
 ## Overview
 
 Each Markdown file here is one Claude Code subagent, addressed by its filename and defined by the YAML frontmatter at the top of the file.
+The agent files are generated from role sources in [`agent_sources/`](../agent_sources/README.md), along with each role's Codex, Cursor, Hermes, and CAI versions under `generated/`; edit the source, not the file, and run `just ci`.
+This index is not generated and is maintained by hand.
 `just install` links each of these files into `~/.claude/agents`, so an agent takes effect the next time a Claude Code session starts.
 The files are linked one at a time rather than as a directory, because `~/.claude/agents` usually already holds agents of its own; a filename that is already taken there is reported as skipped and the local file keeps winning.
 See [Agent Authoring Standards](../docs/docs_standards/agent_authoring.md) before adding or editing one.

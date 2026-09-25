@@ -24,11 +24,22 @@
         no elevation. When the clone and the home directory are on different
         volumes (a hard link is impossible there) the file is copied instead.
 
-    Copies are the only case that can drift. To keep them predictable the copy
-    path compares SHA-256 hashes: an identical file is reported as up to date and
-    left alone, and a file that differs is replaced only when -Force is given.
-    Pass -Copy to force the copy strategy for files even when a hard link would
-    work.
+    Copies can drift, and so can hard links: regenerating agents, or a git
+    checkout that updates a file, replaces the file in this clone rather than
+    editing it, which leaves the installed link holding the old content. The
+    file path compares SHA-256 hashes: an identical file is reported as up to
+    date and left alone. A file that differs is refreshed when its content is
+    still what this installer last placed there, as recorded in
+    install-state.json under %LOCALAPPDATA%\dotagents, and is otherwise
+    replaced only when -Force is given. Pass -Copy to force the copy strategy
+    for files even when a hard link would work.
+
+    The agents generated from agent_sources/ are installed the same way as the
+    Claude agents: one file per generated agent in ~/.codex/agents and
+    ~/.cursor/agents. CAI personas are installed only by scripts/install.sh,
+    because CAI's layout is Linux/XDG. Each generated Hermes personality is set
+    in Hermes config through its CLI; one this installer did not set, or one
+    changed since, is replaced only with -Force.
 
     An existing real file or directory that this repository did not create is
     never overwritten unless -Force is given.
@@ -51,7 +62,20 @@
     Skip turning off agent commit and PR attribution.
 
 .PARAMETER NoHermes
-    Skip adding this repository's skills to Hermes skills.external_dirs.
+    Skip both Hermes steps: adding this repository's skills to
+    skills.external_dirs, and setting the generated personalities.
+
+.PARAMETER NoCodexAgents
+    Skip installing the generated Codex agents.
+
+.PARAMETER NoCursorAgents
+    Skip installing the generated Cursor agents.
+
+.PARAMETER NoHermesPersonalities
+    Skip setting the generated Hermes personalities.
+
+.PARAMETER NoCaiPersonas
+    Skip the CAI personas step, which this installer reports as unsupported.
 
 .EXAMPLE
     .\scripts\install.ps1 -DryRun
@@ -67,7 +91,11 @@ param(
     [switch]$Copy,
     [switch]$NoStatusline,
     [switch]$NoAttribution,
-    [switch]$NoHermes
+    [switch]$NoHermes,
+    [switch]$NoCodexAgents,
+    [switch]$NoCursorAgents,
+    [switch]$NoHermesPersonalities,
+    [switch]$NoCaiPersonas
 )
 
 Set-StrictMode -Version Latest
@@ -182,6 +210,56 @@ function Install-DirLink {
     }
 }
 
+# Per-user record of what this installer placed, so it can tell its own stale
+# files and Hermes personalities from ones the user owns.
+function Get-StatePath {
+    $base = if ($IsWindows) {
+        if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) { $env:LOCALAPPDATA } else { Join-Path $HOME 'AppData/Local' }
+    } elseif (-not [string]::IsNullOrWhiteSpace($env:XDG_STATE_HOME)) {
+        $env:XDG_STATE_HOME.Trim()
+    } else {
+        Join-Path $HOME '.local/state'
+    }
+    return Join-Path (Join-Path $base 'dotagents') 'install-state.json'
+}
+
+function Get-InstallState {
+    if ($null -ne $script:installState) { return $script:installState }
+    $path = Get-StatePath
+    $state = @{}
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+        try {
+            $parsed = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
+            if ($parsed -is [hashtable]) { $state = $parsed }
+        } catch {
+            Write-Detail "note: cannot read $path ($($_.Exception.Message)); treating nothing as installed by this script"
+        }
+    }
+    foreach ($key in 'file_links', 'hermes_personalities') {
+        if ($state[$key] -isnot [hashtable]) { $state[$key] = @{} }
+    }
+    $script:installState = $state
+    return $state
+}
+
+function Save-InstallState {
+    if ($DryRun -or -not $script:installStateChanged) { return }
+    $path = Get-StatePath
+    $parent = Split-Path -Parent $path
+    if (-not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+    $temp = "$path.tmp"
+    [IO.File]::WriteAllText($temp, (ConvertTo-Json -InputObject $script:installState -Depth 10) + "`n")
+    Move-Item -LiteralPath $temp -Destination $path -Force
+}
+
+function Set-InstallStateEntry {
+    param([string]$Section, [string]$Key, $Value)
+    $state = Get-InstallState
+    if ($state[$Section][$Key] -ceq $Value) { return }
+    $state[$Section][$Key] = $Value
+    $script:installStateChanged = $true
+}
+
 # Install-FileLink <source-file> <link-path>
 # Hard-link link-path to source-file on the same volume, else copy it.
 function Install-FileLink {
@@ -191,8 +269,10 @@ function Install-FileLink {
     )
     $source = Resolve-Full $Source
     $link = Expand-Home $Link
+    $stateKey = [System.IO.Path]::GetFullPath($link)
+    $sourceSha = Get-Sha $source
 
-    $sameVolume = (Get-Root $source) -ieq (Get-Root ([System.IO.Path]::GetFullPath($link)))
+    $sameVolume = (Get-Root $source) -ieq (Get-Root $stateKey)
     $useCopy = $Copy -or (-not $sameVolume)
 
     if (Test-Path -LiteralPath $link) {
@@ -203,11 +283,19 @@ function Install-FileLink {
         }
         # A hard link to the same file, or a copy that still matches, shares the
         # source hash. Either way there is nothing to do.
-        if ((Get-Sha $link) -ieq (Get-Sha $source)) {
+        $linkSha = Get-Sha $link
+        if ($linkSha -ieq $sourceSha) {
             Write-Detail "ok: $link (up to date)"
+            if (-not $DryRun) { Set-InstallStateEntry 'file_links' $stateKey $sourceSha.ToLowerInvariant() }
             return
         }
-        if (-not $Force) {
+        # Unchanged since this installer placed it, so only the source moved on,
+        # as regenerating agents or a git checkout does.
+        $recorded = (Get-InstallState)['file_links'][$stateKey]
+        $stale = $recorded -and ($recorded -ieq $linkSha)
+        if ($stale) {
+            Write-Detail "refresh: $link (unchanged since this installer placed it; the source changed)"
+        } elseif (-not $Force) {
             Write-Detail "skip: $link differs from source (use -Force to replace)"
             return
         }
@@ -226,6 +314,7 @@ function Install-FileLink {
         } else {
             Copy-Item -LiteralPath $source -Destination $link -Force
             Write-Detail "copied: $link <- $source"
+            Set-InstallStateEntry 'file_links' $stateKey $sourceSha.ToLowerInvariant()
         }
         return
     }
@@ -241,6 +330,7 @@ function Install-FileLink {
         Copy-Item -LiteralPath $source -Destination $link -Force
         Write-Detail "copied (hard link failed): $link <- $source"
     }
+    Set-InstallStateEntry 'file_links' $stateKey $sourceSha.ToLowerInvariant()
 }
 
 # Report agent files in a target directory that this repository did not provide,
@@ -248,17 +338,18 @@ function Install-FileLink {
 function Report-ExtraAgents {
     param(
         [Parameter(Mandatory)][string]$SourceDir,
-        [Parameter(Mandatory)][string]$TargetDir
+        [Parameter(Mandatory)][string]$TargetDir,
+        [string]$Filter = '*.md'
     )
     $target = Expand-Home $TargetDir
     if (-not (Test-Path -LiteralPath $target)) { return }
 
     $provided = @{}
-    Get-ChildItem -LiteralPath $SourceDir -Filter '*.md' |
+    Get-ChildItem -LiteralPath $SourceDir -Filter $Filter |
         Where-Object { $_.Name -ne 'README.md' } |
         ForEach-Object { $provided[$_.Name] = $true }
 
-    foreach ($entry in Get-ChildItem -LiteralPath $target -Filter '*.md' -Force) {
+    foreach ($entry in Get-ChildItem -LiteralPath $target -Filter $Filter -Force) {
         $linkTarget = Get-LinkTarget $entry
         if ($linkTarget -and -not (Test-Path -LiteralPath $linkTarget)) {
             Write-Detail "note: broken link left in place: $($entry.Name) -> $linkTarget"
@@ -467,7 +558,7 @@ function ConvertFrom-HermesDirectories {
     return ,$directories
 }
 
-function Install-HermesSkills {
+function Get-HermesHome {
     $hermesHome = if (-not [string]::IsNullOrWhiteSpace($env:HERMES_HOME)) {
         $env:HERMES_HOME.Trim()
     } elseif ($IsWindows) {
@@ -479,16 +570,37 @@ function Install-HermesSkills {
     } else {
         Join-Path $HOME '.hermes'
     }
-    $hermesHome = [IO.Path]::GetFullPath((Expand-Home $hermesHome), (Get-Location).ProviderPath)
-    $config = Join-Path $hermesHome 'config.yaml'
+    return [IO.Path]::GetFullPath((Expand-Home $hermesHome), (Get-Location).ProviderPath)
+}
+
+# Return the Hermes config path, or $null after reporting why Hermes is skipped.
+function Get-HermesConfig {
+    param([Parameter(Mandatory)][string]$HermesHome)
+    $config = Join-Path $HermesHome 'config.yaml'
     if (-not (Test-Path -LiteralPath $config -PathType Leaf)) {
         Write-Detail "skip: Hermes config does not exist: $config"
-        return
+        return $null
     }
     if (-not (Get-Command hermes -ErrorAction SilentlyContinue)) {
         Write-Detail 'skip: Hermes CLI is not installed'
-        return
+        return $null
     }
+    return $config
+}
+
+function Assert-HermesConfigPath {
+    param([string]$Config)
+    $comparer = if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
+    $cliConfig = Invoke-HermesConfig @('config', 'path')
+    if (-not $comparer.Equals([IO.Path]::GetFullPath($cliConfig.Trim()), $Config)) {
+        throw "Hermes config path does not match selected config: $cliConfig (expected $Config)"
+    }
+}
+
+function Install-HermesSkills {
+    $hermesHome = Get-HermesHome
+    $config = Get-HermesConfig $hermesHome
+    if ($null -eq $config) { return }
     $repoSkills = Resolve-Full $skillsDir
     if ($DryRun) {
         Write-Detail "would append $repoSkills to skills.external_dirs in $config (if not already present)"
@@ -499,10 +611,7 @@ function Install-HermesSkills {
         # An explicit home also prevents Hermes from selecting a sticky profile.
         $env:HERMES_HOME = $hermesHome
         $comparer = if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
-        $cliConfig = Invoke-HermesConfig @('config', 'path')
-        if (-not $comparer.Equals([IO.Path]::GetFullPath($cliConfig.Trim()), $config)) {
-            throw "Hermes config path does not match selected config: $cliConfig (expected $config)"
-        }
+        Assert-HermesConfigPath $config
         $raw = Invoke-HermesConfig @('config', 'get', 'skills.external_dirs', '--json')
         $directories = ConvertFrom-HermesDirectories $raw
         $comparisonPath = Get-HermesComparisonPath $repoSkills $hermesHome
@@ -528,12 +637,132 @@ function Install-HermesSkills {
     }
 }
 
+# Read a generated personality: two lines, each a key and a JSON string.
+function Read-PersonalityFile {
+    param([Parameter(Mandatory)][string]$Path)
+    $value = [ordered]@{}
+    foreach ($line in [IO.File]::ReadAllLines($Path)) {
+        $index = $line.IndexOf(': ')
+        $key = if ($index -gt 0) { $line.Substring(0, $index) } else { '' }
+        if ($key -notin 'description', 'system_prompt' -or $value.Contains($key)) {
+            throw "${Path}: unexpected line"
+        }
+        $parsed = ConvertFrom-Json -InputObject $line.Substring($index + 2) -NoEnumerate
+        if ($parsed -isnot [string]) { throw "${Path}: $key must be a string" }
+        $value[$key] = $parsed
+    }
+    if ($value.Count -ne 2) { throw "${Path}: needs description and system_prompt" }
+    return $value
+}
+
+# A personality this installer can own holds exactly description and system_prompt.
+function Get-PersonalityDigest {
+    param($Value)
+    if ($Value -isnot [System.Collections.IDictionary] -or $Value.Count -ne 2 -or
+        -not $Value.Contains('description') -or -not $Value.Contains('system_prompt') -or
+        $Value['description'] -isnot [string] -or $Value['system_prompt'] -isnot [string]) {
+        return $null
+    }
+    $bytes = [Text.Encoding]::UTF8.GetBytes($Value['description'] + [char]0 + $Value['system_prompt'])
+    return 'sha256:' + [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+}
+
+function Test-PersonalityEqual {
+    param($Current, $Desired)
+    $digest = Get-PersonalityDigest $Current
+    return $null -ne $digest -and $digest -ceq (Get-PersonalityDigest $Desired)
+}
+
+function Install-HermesPersonalities {
+    $files = @(if (Test-Path -LiteralPath $hermesPersonalitiesDir) {
+        Get-ChildItem -LiteralPath $hermesPersonalitiesDir -Filter '*.yaml' | Sort-Object Name
+    })
+    $hermesHome = Get-HermesHome
+    $config = Get-HermesConfig $hermesHome
+    if ($null -eq $config) { return }
+    if ($files.Count -eq 0) {
+        Write-Detail "skip: no generated personalities in $hermesPersonalitiesDir"
+        return
+    }
+    $desired = [ordered]@{}
+    foreach ($file in $files) { $desired[$file.BaseName] = Read-PersonalityFile $file.FullName }
+    if ($DryRun) {
+        foreach ($name in $desired.Keys) {
+            Write-Detail "would set agent.personalities.$name in $config if absent or owned by this installer"
+        }
+        return
+    }
+    $previousHome = $env:HERMES_HOME
+    try {
+        $env:HERMES_HOME = $hermesHome
+        Assert-HermesConfigPath $config
+        $raw = Invoke-HermesConfig @('config', 'get', 'agent.personalities', '--json')
+        $current = if ([string]::IsNullOrWhiteSpace($raw) -or $raw.Trim() -ceq 'null') { @{} } else {
+            ConvertFrom-Json -InputObject $raw -AsHashtable -NoEnumerate
+        }
+        if ($current -isnot [System.Collections.IDictionary]) {
+            throw 'Hermes agent.personalities must be a mapping'
+        }
+        $state = Get-InstallState
+        $key = [IO.Path]::GetFullPath($config)
+        if ($state['hermes_personalities'][$key] -isnot [hashtable]) { $state['hermes_personalities'][$key] = @{} }
+        $owned = $state['hermes_personalities'][$key]
+        foreach ($name in $desired.Keys) {
+            $value = $desired[$name]
+            $digest = Get-PersonalityDigest $value
+            $existing = if ($current.Contains($name)) { $current[$name] } else { $null }
+            if (Test-PersonalityEqual $existing $value) {
+                Write-Detail "ok: personality $name is current"
+                if ($owned[$name] -cne $digest) { $owned[$name] = $digest; $script:installStateChanged = $true }
+                continue
+            }
+            $recorded = $owned[$name]
+            if ($null -eq $existing) {
+                $action = 'added'
+            } elseif ($recorded -and (Get-PersonalityDigest $existing) -ceq $recorded) {
+                $action = 'updated'
+            } elseif ($Force) {
+                $action = 'replaced (-Force; the previous value is in the config backup)'
+            } else {
+                Write-Detail "skip: personality $name exists and was not set by this installer, or was changed since (use -Force to replace)"
+                continue
+            }
+            Backup-SettingsOnce $config
+            $json = ConvertTo-Json -InputObject $value -Compress
+            $null = Invoke-HermesConfig @('config', 'set', "agent.personalities.$name", $json)
+            $actual = Invoke-HermesConfig @('config', 'get', "agent.personalities.$name", '--json')
+            $verified = if ([string]::IsNullOrWhiteSpace($actual)) { $null } else {
+                ConvertFrom-Json -InputObject $actual -AsHashtable -NoEnumerate
+            }
+            if (-not (Test-PersonalityEqual $verified $value)) {
+                throw "Hermes agent.personalities.$name verification failed after config set"
+            }
+            $owned[$name] = $digest
+            $script:installStateChanged = $true
+            Write-Detail "${action}: personality $name"
+        }
+        foreach ($name in @($owned.Keys | Sort-Object)) {
+            if ($desired.Contains($name)) { continue }
+            if ($current.Contains($name)) {
+                Write-Detail "note: personality $name was set by this installer, but its role no longer exists; left in place for you to remove"
+            } else {
+                $owned.Remove($name)
+                $script:installStateChanged = $true
+            }
+        }
+    } finally {
+        $env:HERMES_HOME = $previousHome
+    }
+}
+
 # --- paths -----------------------------------------------------------------
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $skillsDir = Join-Path $repoRoot 'skills'
 $agentsDir = Join-Path $repoRoot 'agents'
 $agentsFile = Join-Path $repoRoot 'AGENTS.md'
+$generatedDir = Join-Path $repoRoot 'generated'
+$hermesPersonalitiesDir = Join-Path $generatedDir 'hermes/personalities'
 $claudeStatuslineSource = Join-Path $repoRoot 'claude\statusline-command.ps1'
 $cursorStatuslineSource = Join-Path $repoRoot 'cursor\statusline-command.ps1'
 
@@ -581,6 +810,9 @@ $instructionTargets = @(
 
 # --- run -------------------------------------------------------------------
 
+$script:installState = $null
+$script:installStateChanged = $false
+
 Write-Host "Source: $skillsDir"
 if ($DryRun) { Write-Host '(dry run: nothing will be changed)' }
 
@@ -619,6 +851,45 @@ foreach ($target in $perAgentTargets) {
         Install-FileLink $agent.FullName "$target/$($agent.Name)"
     }
     Report-ExtraAgents $agentsDir $target
+}
+
+# Generated agents for other tools, one file each, like the Claude agents.
+$generatedTargets = @(
+    @{ Label = 'Codex agents'; Switch = 'NoCodexAgents'; Skip = $NoCodexAgents
+       Source = (Join-Path $generatedDir 'codex/agents'); Target = '~/.codex/agents'; Filter = '*.toml' }
+    @{ Label = 'Cursor agents'; Switch = 'NoCursorAgents'; Skip = $NoCursorAgents
+       Source = (Join-Path $generatedDir 'cursor/agents'); Target = '~/.cursor/agents'; Filter = '*.md' }
+)
+foreach ($generated in $generatedTargets) {
+    Write-Step "$($generated.Label):"
+    if ($generated.Skip) {
+        Write-Detail "skipped (-$($generated.Switch))."
+        continue
+    }
+    $files = @(if (Test-Path -LiteralPath $generated.Source) {
+        Get-ChildItem -LiteralPath $generated.Source -Filter $generated.Filter | Sort-Object Name
+    })
+    if ($files.Count -eq 0) {
+        Write-Detail "skip: no generated files in $($generated.Source)"
+        continue
+    }
+    $state = Prepare-RealDir $generated.Target $generated.Source
+    if ($state -eq 'skip') { continue }
+    if ($state -eq 'dry-migrate') {
+        Write-Detail "would link each file into $($generated.Target)"
+        continue
+    }
+    foreach ($file in $files) {
+        Install-FileLink $file.FullName "$($generated.Target)/$($file.Name)"
+    }
+    Report-ExtraAgents $generated.Source $generated.Target $generated.Filter
+}
+
+Write-Step 'CAI personas:'
+if ($NoCaiPersonas) {
+    Write-Detail 'skipped (-NoCaiPersonas).'
+} else {
+    Write-Detail 'skip: CAI personas follow the Linux/XDG layout; install them with scripts/install.sh'
 }
 
 Write-Step 'Global instruction file:'
@@ -688,10 +959,19 @@ if ($NoAttribution) {
 
 if ($NoHermes) {
     Write-Step 'Hermes skills: skipped (-NoHermes).'
+    Write-Step 'Hermes personalities: skipped (-NoHermes).'
 } else {
     Write-Step 'Hermes skills:'
     Install-HermesSkills
+    if ($NoHermesPersonalities) {
+        Write-Step 'Hermes personalities: skipped (-NoHermesPersonalities).'
+    } else {
+        Write-Step 'Hermes personalities:'
+        Install-HermesPersonalities
+    }
 }
+
+Save-InstallState
 
 if ($DryRun) {
     Write-Host 'Dry run: nothing was changed.'

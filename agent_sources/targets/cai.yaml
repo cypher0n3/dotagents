@@ -1,0 +1,33 @@
+schema: 1
+name: cai
+application:
+  name: CAI
+  checked: CAI persona schema in docs/tech_specs/personas.md and internal/personas/persona.go
+  evidence:
+    - CAI docs/tech_specs/personas.md
+    - CAI internal/personas/persona.go
+  notes:
+    - Discovers personas in project .cai/personas/, the configured global persona directory, and embedded definitions.
+    - The schema has model, preferred_models, required_skills, suggested_skills, and runtime limits, but no tools or readonly field.
+    - A role without a model omits the model key; runtime-limit overrides are not enabled until their names and types are recorded here.
+    - The persona reader must accept a symlinked persona file for the installer's per-file links to load.
+format: markdown
+template: cai.md.j2
+output: generated/cai/personas
+noun: persona
+model:
+  key: model
+  list_key: preferred_models
+readonly:
+  render: commented
+  key: readonly
+tools:
+  render: commented
+  key: tools
+  style: list
+required_skills:
+  render: native
+  key: required_skills
+suggested_skills:
+  render: native
+  key: suggested_skills

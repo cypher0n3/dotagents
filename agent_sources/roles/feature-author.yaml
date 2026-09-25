@@ -1,0 +1,19 @@
+schema: 1
+name: feature-author
+description: >-
+  Writes and revises Gherkin feature files that trace to the repository's
+  requirements and specifications, then lints them. Use this agent when
+  business scenarios need to be captured or updated as feature files.
+body: prompts/feature-author.md
+targets: [claude, codex, cursor, hermes, cai]
+model:
+  alias: standard
+skills:
+  required:
+    - feature-files-authoring
+    - markdown-writer
+restrictions:
+  tools: [Read, Grep, Glob, Bash, Write, Edit]
+presentation:
+  claude:
+    color: yellow

@@ -19,9 +19,10 @@ check:skills:
   image: python:3.14-slim-trixie
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends ca-certificates git jq just
-    - pip install --root-user-action=ignore --no-cache-dir skills-ref==0.1.1
+    - pip install --root-user-action=ignore --no-cache-dir skills-ref==0.1.1 uv==0.8.17
   script:
-    - just validate-skills validate-skills-spec validate-agents validate-doc-links test-python
+    # generate-agents only checks under CI, so stale generated files fail here.
+    - just generate-agents validate-skills validate-skills-spec validate-agents validate-doc-links test-python test-agentgen
 
 check:docs:
   stage: check

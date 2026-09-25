@@ -29,6 +29,8 @@ Run them with `just test-python`, which runs every `test_*.py` in this directory
 
 Installer regression tests cover original settings preservation, timestamped backups, repeated runs, and dry runs using temporary homes rather than the real user configuration.
 Hermes tests use an offline CLI double to cover profile selection, external-directory registration, read/write failures, and preservation of local skills and identity.
+They also cover personality ownership: adding, updating an owned personality, refusing a foreign or edited one without `--force`, and reporting one whose role was removed.
+Generated-agent tests cover per-file links for Codex, Cursor, and CAI, their skip switches, dry runs, whole-directory migration, and the PowerShell refresh of a stale installed file.
 The Bash tests require Unix Bash; the PowerShell tests require PowerShell 7 (`pwsh`) and report a skip when that runtime is unavailable.
 `just test-powershell` runs them with a local `pwsh` and is part of `just ci`; without `pwsh` it prints a notice and skips.
 `just test-powershell-container` runs them in the pinned PowerShell image from [`powershell.Containerfile`](powershell.Containerfile), using `podman` or `docker`, so a Linux or macOS machine without `pwsh` can still run them.
@@ -37,5 +39,6 @@ The junction-migration test only runs on Windows, since junctions do not exist e
 
 ## Conventions
 
-Keep these scripts dependency-free so that a fresh clone can run `just ci` with nothing installed but `just`, `python3`, and `markdownlint-cli2`.
+Keep these scripts dependency-free, so that every check here runs with nothing installed but `just`, `python3`, and `markdownlint-cli2`.
 A check that needs a third-party package belongs in a separate recipe that states its own prerequisite.
+The agent generator is that case: it lives in [`tools/agentgen/`](../tools/agentgen/README.md) with its own locked dependencies, so `just ci` also needs [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for its `generate-agents` and `test-agentgen` recipes.

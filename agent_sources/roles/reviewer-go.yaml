@@ -1,0 +1,22 @@
+schema: 1
+name: reviewer-go
+description: >-
+  Performs adversarial review of a Go change against its specifications,
+  modern Go practice, concurrency and security risks, and the repository's own
+  checks, without editing anything. Use proactively after Go code is written
+  and before it is committed, and whenever a review of a Go branch, diff, or
+  pull request is requested.
+body: prompts/reviewer-go.md
+targets: [claude, codex, cursor, hermes, cai]
+model:
+  alias: strong
+skills:
+  required:
+    - senior-go-dev-reviewer
+    - code-review-precision
+restrictions:
+  readonly: true
+  tools: [Read, Grep, Glob, Bash]
+presentation:
+  claude:
+    color: red

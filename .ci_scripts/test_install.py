@@ -24,7 +24,7 @@ class InstallBackupTest(unittest.TestCase):
         self.home = Path(temp.name)
         self.env = dict(os.environ, HOME=str(self.home), TZ="EST5",
                         HERMES_HOME=str(self.home / ".hermes"))
-        for key in ("CURSOR_CONFIG_DIR", "XDG_CONFIG_HOME"):
+        for key in ("CURSOR_CONFIG_DIR", "XDG_CONFIG_HOME", "XDG_STATE_HOME"):
             self.env.pop(key, None)
         self.paths = [
             self.home / ".claude/settings.json",
@@ -40,10 +40,12 @@ class InstallBackupTest(unittest.TestCase):
             path.parent.mkdir()
             path.write_bytes(content)
 
-    def install(self, *args: str, extra_env=None, check=True) -> subprocess.CompletedProcess:
+    def install(self, *args: str, extra_env=None, check=True, personalities=False) -> subprocess.CompletedProcess:
         env = dict(self.env, **(extra_env or {}))
+        # Settings and skill-registration tests leave personalities to the tests below.
+        flags = [] if personalities else ["--no-hermes-personalities"]
         result = subprocess.run(
-            ["bash", str(REPO / "scripts/install.sh"), *args],
+            ["bash", str(REPO / "scripts/install.sh"), *flags, *args],
             env=env,
             cwd=REPO,
             text=True,
@@ -99,6 +101,21 @@ elif args[:3] == ['config', 'set', 'skills.external_dirs']:
     if mode != 'no-write':
         value = json.loads(config.read_text())
         value['skills']['external_dirs'] = json.loads(args[3])
+        config.write_text(json.dumps(value) + '\n')
+elif args == ['config', 'get', 'agent.personalities', '--json']:
+    if mode == 'personalities-bad':
+        print('["not", "a", "mapping"]')
+    else:
+        print(json.dumps(json.loads(config.read_text()).get('agent', {}).get('personalities')))
+elif args[:2] == ['config', 'get'] and args[2].startswith('agent.personalities.') and args[3:] == ['--json']:
+    name = args[2].split('.', 2)[2]
+    personalities = json.loads(config.read_text()).get('agent', {}).get('personalities') or {}
+    print(json.dumps(personalities.get(name)))
+elif args[:2] == ['config', 'set'] and args[2].startswith('agent.personalities.') and len(args) == 4:
+    if mode != 'personality-no-write':
+        value = json.loads(config.read_text())
+        name = args[2].split('.', 2)[2]
+        value.setdefault('agent', {}).setdefault('personalities', {})[name] = json.loads(args[3])
         config.write_text(json.dumps(value) + '\n')
 else:
     sys.exit(7)
@@ -262,6 +279,120 @@ else:
                 new = set(self.backups(config)) - previous
                 self.assertEqual(len(new), 1)
                 self.assertEqual(new.pop().read_bytes(), original)
+
+    def personalities(self, config):
+        return json.loads(config.read_text()).get("agent", {}).get("personalities", {})
+
+    def generated_personality(self, name):
+        path = REPO / "generated/hermes/personalities" / (name + ".yaml")
+        return {key: json.loads(value) for key, value in
+                (line.split(": ", 1) for line in path.read_text(encoding="utf-8").splitlines())}
+
+    def state(self):
+        path = self.home / ".local/state/dotagents/install-state.json"
+        return json.loads(path.read_text()) if path.exists() else None
+
+    def test_hermes_personalities_are_added_with_one_shared_backup(self):
+        config = self.seed_hermes()
+        original = config.read_bytes()
+        result = self.install(personalities=True)
+        names = sorted(p.stem for p in (REPO / "generated/hermes/personalities").glob("*.yaml"))
+        self.assertEqual(sorted(self.personalities(config)), names)
+        self.assertEqual(self.personalities(config)["reviewer"], self.generated_personality("reviewer"))
+        self.assertIn("added: personality reviewer", result.stdout)
+        backups = self.backups(config)
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_bytes(), original)
+        owned = self.state()["hermes_personalities"][str(config.resolve())]
+        self.assertEqual(sorted(owned), names)
+        after = config.read_bytes()
+        result = self.install(personalities=True)
+        self.assertIn("ok: personality reviewer is current", result.stdout)
+        self.assertEqual(config.read_bytes(), after)
+        self.assertEqual(self.backups(config), backups)
+
+    def test_hermes_owned_personality_is_updated_without_force(self):
+        config = self.seed_hermes()
+        self.install(personalities=True)
+        # An older render this installer set, and recorded as its own.
+        older = {"description": "old", "system_prompt": "old prompt"}
+        data = json.loads(config.read_text())
+        data["agent"]["personalities"]["reviewer"] = older
+        config.write_text(json.dumps(data))
+        state_path = self.home / ".local/state/dotagents/install-state.json"
+        state = self.state()
+        digest = "sha256:" + __import__("hashlib").sha256(b"old\0old prompt").hexdigest()
+        state["hermes_personalities"][str(config.resolve())]["reviewer"] = digest
+        state_path.write_text(json.dumps(state))
+        result = self.install(personalities=True)
+        self.assertIn("updated: personality reviewer", result.stdout)
+        self.assertEqual(self.personalities(config)["reviewer"], self.generated_personality("reviewer"))
+
+    def test_hermes_foreign_or_edited_personality_needs_force(self):
+        config = self.seed_hermes()
+        mine = {"description": "mine", "system_prompt": "my own reviewer"}
+        data = json.loads(config.read_text())
+        data["agent"] = {"personalities": {"reviewer": mine, "pirate": "Talk like a pirate."}}
+        config.write_text(json.dumps(data))
+        result = self.install(personalities=True)
+        self.assertIn("skip: personality reviewer exists and was not set by this installer", result.stdout)
+        self.assertEqual(self.personalities(config)["reviewer"], mine)
+        self.assertEqual(self.personalities(config)["pirate"], "Talk like a pirate.")
+        self.assertNotIn("reviewer", self.state()["hermes_personalities"][str(config.resolve())])
+        # A personality this installer set and the user then edited is theirs too.
+        edited = dict(self.personalities(config)["coder"], tone="terse")
+        data = json.loads(config.read_text())
+        data["agent"]["personalities"]["coder"] = edited
+        config.write_text(json.dumps(data))
+        result = self.install(personalities=True)
+        self.assertIn("skip: personality coder exists", result.stdout)
+        self.assertEqual(self.personalities(config)["coder"], edited)
+        result = self.install("--force", personalities=True)
+        self.assertIn("replaced (--force", result.stdout)
+        self.assertEqual(self.personalities(config)["reviewer"], self.generated_personality("reviewer"))
+        self.assertEqual(self.personalities(config)["coder"], self.generated_personality("coder"))
+        self.assertEqual(self.personalities(config)["pirate"], "Talk like a pirate.")
+        self.assertTrue(any(b"my own reviewer" in backup.read_bytes() for backup in self.backups(config)))
+
+    def test_hermes_personality_for_removed_role_is_reported_not_removed(self):
+        config = self.seed_hermes()
+        self.install(personalities=True)
+        state_path = self.home / ".local/state/dotagents/install-state.json"
+        state = self.state()
+        state["hermes_personalities"][str(config.resolve())]["retired"] = "sha256:0"
+        state_path.write_text(json.dumps(state))
+        data = json.loads(config.read_text())
+        data["agent"]["personalities"]["retired"] = {"description": "x", "system_prompt": "y"}
+        config.write_text(json.dumps(data))
+        result = self.install(personalities=True)
+        self.assertIn("note: personality retired was set by this installer, but its role no longer exists",
+                      result.stdout)
+        self.assertIn("retired", self.personalities(config))
+
+    def test_hermes_personalities_dry_run_and_switches_never_write(self):
+        config = self.seed_hermes()
+        original = config.read_bytes()
+        result = self.install("--dry-run", personalities=True)
+        self.assertIn("would set agent.personalities.reviewer", result.stdout)
+        self.assertFalse((self.home / "hermes-calls").exists())
+        self.assertEqual(config.read_bytes(), original)
+        result = self.install("--no-hermes-personalities", personalities=True)
+        self.assertIn("skipped (--no-hermes-personalities).", result.stdout)
+        self.assertEqual(self.personalities(config), {})
+        result = self.install("--no-hermes", personalities=True)
+        self.assertEqual(result.stdout.count("skipped (--no-hermes)."), 2)
+        self.assertEqual(self.personalities(config), {})
+        self.assertIsNone(self.state())
+
+    def test_hermes_personality_failures_keep_config_and_state(self):
+        config = self.seed_hermes()
+        for mode in ("personalities-bad", "personality-no-write"):
+            with self.subTest(mode=mode):
+                result = self.install(extra_env={"DOTAGENTS_HERMES_TEST_MODE": mode}, check=False,
+                                      personalities=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.personalities(config), {})
+                self.assertIsNone(self.state())
 
     def test_one_timestamped_backup_preserves_original_before_both_updates(self) -> None:
         self.install()
@@ -511,11 +642,17 @@ class InstallSkillLinksTest(unittest.TestCase):
         (self.repo / "agents").mkdir()
         (self.repo / "agents/helper.md").write_text("Agent\n", encoding="utf-8")
         (self.repo / "AGENTS.md").write_text("Global\n", encoding="utf-8")
+        for relative in ("generated/codex/agents/helper.toml", "generated/cursor/agents/helper.md",
+                         "generated/cai/personas/helper.md"):
+            (self.repo / relative).parent.mkdir(parents=True)
+            (self.repo / relative).write_text("Generated\n", encoding="utf-8")
         for name in ("alpha", "beta"):
             (self.repo / "skills" / name).mkdir(parents=True)
             (self.repo / "skills" / name / "SKILL.md").write_text("Skill\n", encoding="utf-8")
         self.skills = self.repo / "skills"
         self.env = dict(os.environ, HOME=str(self.home))
+        for key in ("CURSOR_CONFIG_DIR", "XDG_CONFIG_HOME", "XDG_STATE_HOME"):
+            self.env.pop(key, None)
 
     def install(self, *args: str, check=True) -> subprocess.CompletedProcess:
         result = subprocess.run(
@@ -613,6 +750,83 @@ class InstallSkillLinksTest(unittest.TestCase):
         self.assertTrue((directory / ".system").is_dir())
         self.assertTrue((directory / "gone").is_symlink())
         self.assertIn("stale: gone", result.stderr)
+
+    GENERATED = (
+        ("Codex agents", ".codex", ".codex/agents", "generated/codex/agents", "helper.toml", "--no-codex-agents"),
+        ("Cursor agents", ".cursor", ".cursor/agents", "generated/cursor/agents", "helper.md", "--no-cursor-agents"),
+        ("CAI personas", ".config/cai", ".config/cai/personas", "generated/cai/personas", "helper.md",
+         "--no-cai-personas"),
+    )
+
+    def test_generated_files_are_linked_per_file(self) -> None:
+        (self.home / ".config/cai").mkdir(parents=True)
+        self.install()
+        for label, _, target, source, name, _ in self.GENERATED:
+            with self.subTest(label=label):
+                directory = self.home / target
+                self.assertTrue(directory.is_dir() and not directory.is_symlink())
+                self.assertTrue((directory / name).is_symlink())
+                self.assertEqual((directory / name).resolve(), (self.repo / source / name).resolve())
+
+    def test_cai_step_needs_its_configuration_root(self) -> None:
+        result = self.install()
+        self.assertIn("skip: %s not found" % (self.home / ".config/cai"), result.stdout)
+        self.assertFalse((self.home / ".config").exists())
+
+    def test_generated_steps_honor_their_switches_and_dry_run(self) -> None:
+        for _, root, _, _, _, _ in self.GENERATED:
+            (self.home / root).mkdir(parents=True, exist_ok=True)
+        result = self.install("--dry-run")
+        for _, _, target, _, _, _ in self.GENERATED:
+            self.assertFalse((self.home / target).exists(), target)
+        self.assertIn("would run: ln -sfn", result.stdout)
+        result = self.install(*(switch for *_, switch in self.GENERATED))
+        for _, _, target, _, _, switch in self.GENERATED:
+            self.assertIn("skipped (%s)." % switch, result.stdout)
+            self.assertFalse((self.home / target).exists(), target)
+
+    def test_cai_personas_follow_xdg_config_home(self) -> None:
+        config = self.home / "xdg config"
+        (config / "cai").mkdir(parents=True)
+        (self.home / ".config/cai").mkdir(parents=True)
+        self.env["XDG_CONFIG_HOME"] = str(config)
+        self.install()
+        self.assertTrue((config / "cai/personas/helper.md").is_symlink())
+        self.assertFalse((self.home / ".config/cai/personas").exists())
+        self.env["XDG_CONFIG_HOME"] = "  "
+        self.install()
+        self.assertTrue((self.home / ".config/cai/personas/helper.md").is_symlink())
+
+    def test_generated_collisions_and_leftovers_are_reported_not_replaced(self) -> None:
+        agents = self.home / ".cursor/agents"
+        agents.mkdir(parents=True)
+        (agents / "helper.md").write_text("Mine\n", encoding="utf-8")
+        (agents / "retired.md").symlink_to(self.repo / "generated/cursor/agents/retired.md")
+        (agents / "local.md").write_text("Local\n", encoding="utf-8")
+        result = self.install()
+        self.assertIn("exists and is not a symlink", result.stderr)
+        self.assertEqual((agents / "helper.md").read_text(), "Mine\n")
+        self.assertIn("stale: retired.md", result.stderr)
+        self.assertIn("local: local.md", result.stderr)
+        self.assertTrue((agents / "retired.md").is_symlink())
+
+    def test_whole_generated_directory_link_is_migrated(self) -> None:
+        link = self.home / ".codex/agents"
+        link.parent.mkdir()
+        link.symlink_to(self.repo / "generated/codex/agents", target_is_directory=True)
+        result = self.install("--dry-run")
+        self.assertIn("would link each file into", result.stdout)
+        self.assertTrue(link.is_symlink())
+        self.install()
+        self.assertTrue(link.is_dir() and not link.is_symlink())
+        self.assertEqual(sorted(p.name for p in link.iterdir()), ["helper.toml"])
+
+    def test_missing_generated_directory_is_skipped(self) -> None:
+        shutil.rmtree(self.repo / "generated")
+        (self.home / ".codex").mkdir()
+        result = self.install()
+        self.assertIn("skip: no generated files in", result.stdout)
+        self.assertFalse((self.home / ".codex/agents").exists())
 
     def test_reinstall_reports_already_linked(self) -> None:
         self.install()

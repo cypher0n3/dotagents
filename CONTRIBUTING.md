@@ -47,7 +47,8 @@ Before opening a request that adds a skill:
 
 ## New Agents
 
-An agent under `agents/` is held to the same vetting as a skill, and to one more test: it must preload existing skills rather than restate them.
+An agent is held to the same vetting as a skill, and to one more test: it must preload existing skills rather than restate them.
+Agents are authored as role sources under [`agent_sources/`](agent_sources/README.md) and generated into `agents/` and `generated/`, so change the source and commit the regenerated files that `just ci` writes.
 If the rule you want the agent to follow is not in a skill, add or extend the skill first and have the agent preload it, so the rule is written once and every tool that reads the skill sees it.
 Read [Agent Authoring Standards](docs/docs_standards/agent_authoring.md) before opening the request, and say which model you chose and why.
 
@@ -60,7 +61,7 @@ just setup
 just ci
 ```
 
-That runs Markdown lint, internal link validation, skill frontmatter and manifest validation, agent frontmatter and index validation, the offline unit tests, and shell lint.
+That regenerates the agents from `agent_sources/`, then runs Markdown lint, internal link validation, skill frontmatter and manifest validation, agent frontmatter and index validation, the offline unit tests, the agent generator's tests, and shell lint.
 See [`.ci_scripts/README.md`](.ci_scripts/README.md) for what each validator checks.
 
 Do not modify [`.markdownlint.yml`](.markdownlint.yml) or [`.markdownlint-cli2.jsonc`](.markdownlint-cli2.jsonc), and do not add lint suppressions, to make a check pass.

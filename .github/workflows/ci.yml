@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   skills:
-    name: Validate skills, agents, and links; run Python tests
+    name: Check generated agents; validate skills, agents, and links; run Python tests
     runs-on: ubuntu-latest
     container: python:3.14-slim-trixie
     steps:
@@ -32,10 +32,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Install the Agent Skills reference validator
-        run: pip install --root-user-action=ignore --no-cache-dir skills-ref==0.1.1
+      - name: Install the Agent Skills reference validator and uv
+        run: pip install --root-user-action=ignore --no-cache-dir skills-ref==0.1.1 uv==0.8.17
+      # generate-agents only checks under CI, so stale generated files fail here.
       - name: Validate and test
-        run: just validate-skills validate-skills-spec validate-agents validate-doc-links test-python
+        run: just generate-agents validate-skills validate-skills-spec validate-agents validate-doc-links test-python test-agentgen
 
   docs:
     name: Lint Markdown
