@@ -3,7 +3,7 @@
 ## Status and Scope
 
 This is a proposal for review, not an implemented generator, supported install mode, or change to the current [agent authoring contract](../docs_standards/agent_authoring.md).
-The goal is to author shared agent roles once using Jinja templates and structured data, then generate target-native Claude Code agents, Cursor agents, and CAI personas.
+The goal is to author shared agent roles once using Jinja templates and structured data, then generate target-native Claude Code agents, Codex custom agents, Cursor agents, Hermes personalities, and CAI personas.
 Generation belongs to `dotagents`; consuming applications continue to load their own native formats.
 CAI's draft 470 runtime compatibility work remains deferred and is not a prerequisite for this proposal.
 
@@ -16,14 +16,14 @@ The current [CAI integration](../../README.md#cai) continues to require no insta
 
 The proposed generator separates shared role intent from target-specific representation.
 
-- Keep role instructions, descriptions, and skill dependencies in one reviewable source rather than maintaining independent Claude Code, Cursor, and CAI prompt copies.
-- Render native Markdown files with validated YAML frontmatter and explicit target-specific model and capability choices.
+- Keep role instructions, descriptions, and skill dependencies in one reviewable source rather than maintaining independent prompt copies for each target.
+- Render each target's native file format, Markdown with validated YAML frontmatter for most targets and TOML for Codex, with explicit target-specific model and capability choices.
 - Make generation deterministic, offline, reviewable, and independent of live home-directory configuration.
 - Detect unsupported semantics before publishing files rather than silently dropping required behavior.
 - Keep generation separate from optional installation into application-owned directories.
 
 The initial proposal does not implement CAI runtime adapters, import foreign configuration, change approval or sandbox policy, convert executable plans, synchronize global instructions, or execute generated agents.
-It does not assume that Claude Code, Cursor, and CAI use equivalent model aliases, skill activation, or tool restrictions.
+It does not assume that any two targets use equivalent model aliases, skill activation, or tool restrictions.
 The existing Claude Code agents are ported into role sources by hand, one reviewed role at a time; there is no automatic importer that reads `agents/*.md` and writes sources.
 
 ## Current Target Evidence
@@ -34,8 +34,20 @@ These references establish the design baseline, not a promise that future applic
 - The [Claude Code subagent documentation](https://docs.claude.com/en/docs/claude-code/sub-agents) and the repository's [agent authoring contract](../docs_standards/agent_authoring.md) define the Claude Code target.
   The current agents use `name`, `description`, `model` as a Claude alias (`opus` or `sonnet`), `color`, a `tools` allowlist, and a `skills` preload list.
   Claude Code enforces `tools` and preloads `skills`, so it is the only current target that can carry both guarantees natively.
+- The [Codex subagent documentation](https://developers.openai.com/codex/subagents) and [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) define custom agents, checked against `codex-cli 0.155.1`.
+  Each custom agent is one standalone TOML file, not Markdown, discovered from user `~/.codex/agents/` and project `.codex/agents/`.
+  `name`, `description`, and `developer_instructions` (the prompt body) are required; any other `config.toml` key may follow, including `model`, `model_reasoning_effort`, `sandbox_mode`, `mcp_servers`, and `skills.config`.
+  `sandbox_mode = "read-only"` is host-enforced, except that live overrides made in the parent session, such as `/permissions` changes or `--yolo`, are reapplied to the child and outrank the file.
+  Codex has no per-agent tool allowlist, and `skills.config` enables or disables skills by path rather than preloading them.
+  A custom agent whose `name` matches a built-in agent (`default`, `worker`, or `explorer`) replaces it; none of the current role names collide.
+  The documentation does not cover symlinks, but `codex-cli 0.155.1` loads a symlinked agent file: in a throwaway `CODEX_HOME`, `codex doctor` reported the same "must define a description" startup warning for a malformed agent stored as a symlink as for one stored as a regular file, and neither warning once both were valid.
+  Codex has no documented reader for Claude Code agent files.
 - The [Cursor subagent documentation](https://cursor.com/docs/subagents) defines project `.cursor/agents/` and user `~/.cursor/agents/` discovery, Markdown with YAML frontmatter, and fields including `name`, `description`, `model`, `readonly`, and `is_background`.
   Cursor also documents foreign-directory compatibility; that does not establish equivalent treatment of every Claude frontmatter field.
+- Hermes Agent, checked against `Hermes Agent v0.21.0` and its [personality](https://hermes-agent.nousresearch.com/docs/user-guide/features/personality/) and [delegation](https://hermes-agent.nousresearch.com/docs/user-guide/features/delegation) documentation, has no file-based agent or persona format.
+  `delegate_task` spawns subagents from a per-call `goal`, `context`, and `role` (`leaf` or `orchestrator`), with no named predefined agents, and the `delegation.*` settings are global.
+  The closest native concept is a personality: an entry under `agent.personalities.<name>` in `~/.hermes/config.yaml` holding `system_prompt`, `description`, `tone`, and `style`, selected per session with `/personality` and applied as a system-prompt overlay for the whole session.
+  A personality has no model, tool, sandbox, or skill field, and Hermes does not read Claude Code agent files; its `import-agent` command maps instructions, permissions, MCP servers, skills, and memories, but not agent definitions.
 - CAI's native persona contract lives in its `docs/tech_specs/personas.md` and `internal/personas/persona.go`.
   The current schema includes `name`, `description`, `model`, `preferred_models`, `required_skills`, `suggested_skills`, and runtime limits, but not a native persona `tools` allowlist or `readonly` field.
 - CAI discovers native personas from project `.cai/personas/`, its configured global persona directory, and embedded definitions.
@@ -70,17 +82,23 @@ agent_sources/
       repository-context.md
   targets/
     claude.yaml
+    codex.yaml
     cursor.yaml
+    hermes.yaml
     cai.yaml
   templates/
     claude.md.j2
+    codex.toml.j2
     cursor.md.j2
+    hermes.yaml.j2
     cai.md.j2
 agents/
   coder.md
   reviewer.md
 generated/
+  codex/agents/
   cursor/agents/
+  hermes/personalities/
   cai/personas/
   manifest.yaml
 tools/agentgen/
@@ -114,7 +132,7 @@ description: >-
   and before it is committed, and whenever a review of a branch, diff, or
   pull request is requested.
 body: prompts/reviewer.md
-targets: [claude, cursor, cai]
+targets: [claude, codex, cursor, hermes, cai]
 model:
   alias: strong
   claude: opus
@@ -157,8 +175,15 @@ Shared intent that a target cannot render natively becomes a commented key under
 
 - `claude` renders `name`, `description`, `model`, `color`, `tools`, and `skills` natively.
   It has no commented keys; `readonly` is carried by the `tools` allowlist, and it accepts no `overrides`.
+- `codex` renders `name`, `description`, `developer_instructions` (the role body), `model`, and `sandbox_mode` natively, the last only as `"read-only"` for a role with `readonly: true`.
+  A writable role omits `sandbox_mode` so the child inherits the parent session's sandbox.
+  It emits `tools` and `skills` as commented keys and drops `color`.
+  Its `overrides` accept only `model_reasoning_effort`, validated against the values the recorded Codex version documents.
 - `cursor` renders `name`, `description`, `model`, and `readonly` natively.
   It emits `tools` and `skills` as commented keys, drops `color`, and accepts no `overrides` in schema version 1.
+- `hermes` renders one personality per role, `generated/hermes/personalities/<name>.yaml`, holding `description` and `system_prompt` natively; the file name supplies the personality name.
+  A personality has no other field the generator uses, so `model`, `readonly`, `tools`, and `skills` are rendered as a fixed explainer paragraph at the start of `system_prompt`, since a value set through `hermes config set` cannot carry YAML comments.
+  It drops `color` and accepts no `overrides`.
 - `cai` renders `name`, `description`, `model` or `preferred_models`, `required_skills`, and `suggested_skills` natively.
   It emits `readonly` and `tools` as commented keys and drops `color`.
   Its `overrides` accept only the persona runtime limits its native schema defines for the recorded CAI version, each validated against that schema's type.
@@ -189,6 +214,7 @@ It does not infer targets from installed applications or mutate files under the 
 3. Use Jinja with `StrictUndefined`, a repository-contained template loader, and an explicit minimal filter set.
    Do not expose environment variables, credentials, filesystem helpers, subprocesses, or network access to templates.
 4. Serialize frontmatter through a YAML serializer with deterministic ordering and quoting; do not concatenate unescaped YAML scalars in templates.
+   For Codex, serialize the whole file through a TOML serializer instead, with the role body as the `developer_instructions` multi-line string, and place the fixed comment lines for commented keys between serialized entries.
    Render the body once, with UTF-8, LF endings, and a final newline.
    Role text containing Jinja delimiters is data, not a second template pass.
 5. Validate rendered frontmatter, prompt structure, skill references, target semantics, output paths, and collisions before publishing the requested output set.
@@ -249,7 +275,7 @@ For each target, the adapter resolves the model in this order:
 
 1. A direct value for that target in the role's `model` block wins.
 2. Otherwise, the role's `alias` is looked up in that target's `alias_list`.
-3. Otherwise, the target's native inheritance form is rendered: `model: inherit` for Cursor, and the inheritance representation verified for the recorded CAI version, rather than a literal copied from another target.
+3. Otherwise, the target's native inheritance form is rendered: `model: inherit` for Cursor, nothing for Hermes (whose personalities always use the session's model, so any resolved model appears only in the explainer paragraph), no `model` key for Codex (which then uses `agents.default_subagent_model` or the parent's model), and the inheritance representation verified for the recorded CAI version, rather than a literal copied from another target.
 
 A resolved list renders natively where the target accepts one, such as CAI's `preferred_models`; a target that takes one model receives the list's first entry.
 A direct value is a single identifier, or a list only for a target whose profile declares list support.
@@ -269,6 +295,8 @@ Dependencies follow the same best-effort rule as restrictions: a role is never w
 
 - Claude Code renders required skills as its native `skills` preload list and adds nothing to the body, which keeps the parity check exact.
 - CAI renders required skills as `required_skills` and suggested skills as `suggested_skills`, when the target profile lists both as supported for the recorded version.
+- Hermes has no preload field; the explainer paragraph at the start of its `system_prompt` names each required skill and instructs the agent to load it before starting work.
+- Codex has no preload field; `skills.config` only enables or disables skills, so the Codex adapter renders dependencies the same way as Cursor below, with a TOML comment and a fixed opening instruction in `developer_instructions`.
 - Cursor has no documented subagent preload field, and discovering Claude agent files does not make Claude's `skills` field one.
   The Cursor adapter emits the list as a commented-out `skills` key, followed by a comment explaining that this harness does not preload the listed skills.
   It also opens the body with a fixed instruction to load each listed skill before starting work.
@@ -293,8 +321,10 @@ Separate behavioral instructions such as "do not edit" from runtime-enforced res
 Shared role data declares restrictions once, as target-independent intent: `readonly` for a role that must not change files, and a tool allowlist where the role needs one.
 Claude Code enforces a `tools` allowlist, so it represents both natively; for example, `reviewer` renders its current `tools: Read, Grep, Glob, Bash`.
 Claude Code has no `readonly` key, so a read-only role is expressed there only through an allowlist that validation confirms excludes every file-writing tool, and no commented key is added; this keeps the parity check exact.
+Codex enforces `sandbox_mode = "read-only"`, which the Codex adapter renders for a read-only role, but has no per-tool allowlist, and live overrides in the parent session outrank the file.
 Cursor enforces its documented `readonly` field, which blocks file edits and state-changing shell commands, but has no per-tool allowlist.
-The current CAI persona schema supports neither.
+The current CAI persona schema supports neither, and a Hermes personality has no restriction field at all, so its restrictions exist only as the explainer paragraph and the role's own instructions.
+A Hermes personality also applies to the whole session once selected, rather than to a delegated subagent, so a read-only personality restricts nothing the session's own approvals do not.
 
 Restrictions are best effort on every target, and a role is never withheld from a target because the target cannot enforce one.
 For each declared restriction, the adapter chooses one of two renderings from its target profile:
@@ -310,7 +340,7 @@ For a read-only role, the unsupported rendering in a CAI persona looks like this
 # that restriction; host approvals and sandbox policy remain the only limit.
 ```
 
-A commented-out key is YAML comment text, not an unsupported field left for the parser to ignore, and the generator never emits an uncommented key the target profile does not list.
+A commented-out key is YAML comment text, or TOML comment text for Codex, not an unsupported field left for the parser to ignore, and the generator never emits an uncommented key the target profile does not list.
 The key names and explainer wording are fixed generator strings, not role text, so role data cannot inject frontmatter through them; the tool list inside a commented `tools` key is validated against the shared allowlist before rendering.
 The generation report and manifest record every unsupported restriction per role and target.
 The role body keeps the restriction as a behavioral instruction on every target, since that is all an unsupported target has.
@@ -328,7 +358,7 @@ The same omission rule does not apply to model choice, dependencies, or permissi
 
 ## Generated Artifact Policy
 
-Generated Claude Code agent files, Cursor agent files, CAI persona files, and the deterministic generation manifest are committed to Git alongside their shared sources.
+Generated Claude Code agent files, Codex agent files, Cursor agent files, Hermes personality files, CAI persona files, and the deterministic generation manifest are committed to Git alongside their shared sources.
 Shared YAML, Markdown, and Jinja files remain the authoring source of truth; generated files must not be edited directly.
 A source change that affects rendered output must include the regenerated artifacts in the same change so reviewers can inspect the exact native prompts.
 Local `just ci` rebuilds the generated artifacts in place as its first step, the same way its Markdown lint already applies fixes, so a source edit followed by `just ci` leaves the checkout regenerated and validated.
@@ -358,16 +388,19 @@ Claude Code agents keep the existing per-file links into `~/.claude/agents`; gen
 
 Both installers install the new targets by default as further steps of `just install`, following the existing Hermes pattern of acting only when the application is present and offering a switch to skip it:
 
+- Codex agents are linked into `~/.codex/agents/` when `~/.codex/` exists; `--no-codex-agents` skips the step.
 - Cursor agents are linked into `~/.cursor/agents/` when `~/.cursor/` exists; `--no-cursor-agents` skips the step.
+- Hermes personalities are written into `agent.personalities.<name>` through `hermes config set`, under the same conditions as the existing Hermes skill registration: the Hermes configuration exists and the `hermes` command is on `PATH`; `--no-hermes-personalities` skips the step, and the existing `--no-hermes` skips both Hermes steps.
 - CAI personas are linked into `$XDG_CONFIG_HOME/cai/personas/`, falling back to `~/.config/cai/personas/`, when that CAI configuration root exists; `--no-cai-personas` skips the step.
-- The PowerShell installer offers `-NoCursorAgents` and `-NoCaiPersonas`; since the CAI target is Linux/XDG only, it reports the CAI step as unsupported on Windows rather than guessing a path.
-- An absent application is reported as skipped, and neither step creates the application's configuration root.
-- `--dry-run` reports every link either step would make, and writes nothing.
+- The PowerShell installer offers `-NoCodexAgents`, `-NoCursorAgents`, `-NoHermesPersonalities`, and `-NoCaiPersonas`; since the CAI target is Linux/XDG only, it reports the CAI step as unsupported on Windows rather than guessing a path.
+- An absent application is reported as skipped, and no step creates the application's configuration root.
+- `--dry-run` reports every link any step would make, and writes nothing.
 
 Every destination stays a real directory the application owns, and installation places one entry per generated file inside it.
 Installation never links a whole output directory, such as `agents/` or `generated/cursor/agents/`, into an application's directory, because an application or user that writes its own agent there would land that file in this repository.
 An existing whole-directory link to a repository output directory is migrated to a real directory, as the current installers already do for `~/.claude/skills` and `~/.claude/agents`.
-Claude Code agents, Cursor agents, and CAI personas are all installed as per-file symlinks, so edits and regenerations take effect without reinstalling.
+Claude Code agents, Codex agents, Cursor agents, and CAI personas are all installed as per-file symlinks, so edits and regenerations take effect without reinstalling.
+Codex loads symlinked agent files, as recorded under [Current Target Evidence](#current-target-evidence); a parser fixture keeps that verified for each recorded Codex version.
 
 CAI integration targets the XDG root, not an inferred sibling of `CAI_CONFIG`.
 The override can identify a custom config file during explicit diagnostics, but it is not fully supported for relocating all global artifacts and must not silently retarget generated persona installation.
@@ -383,6 +416,15 @@ Unrelated personas in the directory are never touched.
 Removing a source role leaves a broken link that the installer reports and never removes, as it already does for skills and Claude Code agents.
 Dry runs perform no writes or application startup, and repeated unchanged installations remain no-ops.
 The Linux/XDG CAI target does not imply Windows support.
+
+Hermes personalities are the one target installed by value rather than by link, because a personality lives inside `~/.hermes/config.yaml` rather than in a file of its own.
+The installer reads each generated `generated/hermes/personalities/<name>.yaml` and sets `agent.personalities.<name>` to its `description` and `system_prompt` through `hermes config set`, never by editing `config.yaml` directly, as the existing skill registration already does.
+Before its first change to `config.yaml` in a run, it takes one timestamped backup under the existing [backup contract](../../README.md#settings-backups), shared with the skill registration step.
+A personality whose value already equals the rendered one is a no-op, and a dry run reports each personality it would set without invoking the `hermes` command.
+The rendered value always wins: a personality whose name matches a generated role is replaced when its value differs, whether that value is an older render, a hand edit, or an unrelated personality of the same name.
+The installer names each personality it replaced, and the previous value survives in the timestamped `config.yaml` backup taken before the change.
+Personalities are never removed; a role deleted from the sources leaves its personality in place, and because the installer keeps no record of what it set, it cannot tell that leftover from the user's own personalities and does not report it.
+The installer never selects a personality; `display.personality` and the user's own personalities are left alone.
 
 ## Adding a Target
 
@@ -400,6 +442,7 @@ A change that adds a target includes all of the following:
 
 A harness with no native agent or persona format is not a target.
 The generator does not approximate one by writing roles into global instruction files, because those load for every session rather than on demand.
+Hermes is the one deliberate exception: it has no agent file format, so its adapter renders each role as a personality that the installer writes into Hermes configuration, as described in [Installation Boundary](#installation-boundary).
 
 Gemini, Grok, and GitHub Copilot in VS Code already receive shared skills or instructions from the installer and are candidates for later targets.
 None is included until a change supplies the evidence above.
@@ -407,14 +450,14 @@ None is included until a change supplies the evidence above.
 ## Migration and Validation
 
 The first implementation ports all nine current roles in one change: coder, docs-writer, feature-author, planner, researcher, reviewer, reviewer-go, spec-author, and test-runner.
-That change ships the generator, the three target profiles and templates, every role source, the regenerated `agents/*.md`, the Cursor and CAI outputs, the manifest, the installer steps, and the documentation updates together.
+That change ships the generator, every target profile and template, every role source, the regenerated `agents/*.md`, the outputs for every other target, the manifest, the installer steps, and the documentation updates together.
 The existing agents are the reference for testing the Claude Code adapter.
 Port each role by hand into a role source, render it for Claude Code, and compare the result with the current `agents/<name>.md`.
 A role passes the parity check when its rendered file keeps the same `name`, `description`, `model`, `color`, `tools`, `skills`, and body text as the hand-authored file, with any difference listed and approved in the change that ports it.
 The change is not merged until all nine roles pass, so `agents/` switches from hand-authored to generated at once.
 Its description lists every approved parity difference by role, so a schema mistake that affects several roles is visible in one place.
 Porting never changes a role's public name or skill dependencies.
-Render Cursor and CAI outputs for a role only after its Claude Code parity passes, and review them before installation.
+Render a role's outputs for the other targets only after its Claude Code parity passes, and review them before installation.
 
 Proposed acceptance evidence includes:
 
@@ -422,21 +465,21 @@ Proposed acceptance evidence includes:
 - Undefined variables, invalid YAML, missing skills, unresolved model mappings, restrictions with neither a native nor a commented rendering in the target profile, and filename collisions fail before publication.
 - Malicious-looking role strings remain scalar data, and template includes or output paths cannot escape their approved roots.
 - Consumer-parser fixtures and target allowlists agree on every emitted field; unknown-field tolerance cannot hide semantic loss.
-- Cursor and CAI fixtures preserve role intent, dependency intent, target-specific loading instructions, and model inheritance behavior without asserting identical permissions.
+- Fixtures for every non-Claude target preserve role intent, dependency intent, target-specific loading instructions, and model inheritance behavior without asserting identical permissions.
 - Each target's parser accepts frontmatter containing commented-out restriction and `skills` keys, and a restriction or dependency switches between commented and native rendering only through its target profile.
 - All nine roles pass the Claude Code parity check, and adding or removing a target does not rewrite unrelated outputs.
 - Disposable installation tests cover XDG defaults and overrides, the partial `CAI_CONFIG` boundary, user-file collisions, broken-link reports, no-op runs, and CAI discovery of symlinked personas.
 - Application smoke checks verify discovery and loading separately from rendering, without model calls or executing the role where a local inspection surface is available.
 - Local `just ci` regenerates in place before its other checks, refuses to overwrite a hand-edited or unlisted file at a managed path, and writes nothing when outputs are current.
 - Hosted CI check-only mode rejects missing, changed, or obsolete committed artifacts and manifest drift without weakening existing lint or validation rules.
-- Installer tests cover the default Cursor and CAI steps, both skip switches, absent applications, dry runs, and the Windows CAI report.
+- Installer tests cover the default step and skip switch for every target, absent applications, dry runs, and the Windows CAI report.
 
 ## Generator Tooling
 
 The generator is a Python project in `tools/agentgen/`, managed with `uv`.
-Its `pyproject.toml` declares the runtime dependencies, Jinja2 and PyYAML, and a `requires-python` range that includes the Python version the hosted CI jobs use.
+Its `pyproject.toml` declares the runtime dependencies, Jinja2, PyYAML, and a TOML writer for Codex output such as `tomli-w`, and a `requires-python` range that includes the Python version the hosted CI jobs use.
 The committed `uv.lock` pins every dependency, including transitive ones, with hashes.
-TOML is used only for these two files, because `uv` and Python packaging accept no other format; every file the generator reads or writes, including role data, target profiles, alias lists, and the manifest, is YAML.
+TOML is used only for these two files and for generated Codex agents, because `uv`, Python packaging, and Codex accept no other format; every other file the generator reads or writes, including role data, target profiles, alias lists, and the manifest, is YAML.
 
 - Local `just ci` runs the generator with `uv run --locked --project tools/agentgen`, so a lock file that no longer matches `pyproject.toml` fails the run instead of being rewritten.
 - The hosted CI jobs install `uv`, keep the GitHub and GitLab definitions in sync, and run the same recipe, which the `CI` environment variable switches to check-only mode.
