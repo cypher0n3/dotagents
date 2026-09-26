@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Link this repository's skills into the agent tools that read them.
 #
-# It also links each file in agents/ into ~/.claude/agents, the directory Claude
-# Code reads user-level subagent definitions from, and links the global
+# It also generates the agents from agent_sources/ into generated/ with
+# .ci_scripts/generate_agents.py, the same code `just ci` runs, and links each
+# generated Claude Code agent into ~/.claude/agents, the directory Claude Code
+# reads user-level subagent definitions from. It links the global
 # AGENTS.md into the tools that document a global
 # instruction file of their own, installs the Claude Code and Cursor status
 # line scripts and points each tool's settings at its script, and turns off
@@ -11,17 +13,16 @@
 # Existing Hermes setups scan skills/ via skills.external_dirs; --no-hermes
 # skips registration without replacing Hermes-owned skills or identity.
 #
-# The agents generated from agent_sources/ for other tools are installed the
-# same way as the Claude agents: one symlink per file in generated/codex/agents,
-# generated/cursor/agents, and generated/cai/personas, into ~/.codex/agents,
-# ~/.cursor/agents, and the CAI personas directory. Like the skill links, the
-# Codex and Cursor links are made whether or not the tool is installed; the
-# CAI step acts only when CAI's configuration root exists, because nothing else
-# here creates it. Hermes has no agent files, so each
-# generated personality is set in its config through the hermes CLI. A
-# personality this installer did not set, or one changed since it did, is
-# replaced only with --force; ownership is recorded in
-# ${XDG_STATE_HOME:-~/.local/state}/dotagents/install-state.json.
+# The generated Codex and Cursor agents are installed the same way as the
+# Claude agents: one symlink per file in generated/codex/agents and
+# generated/cursor/agents, into ~/.codex/agents and ~/.cursor/agents, whether or
+# not the tool is installed, like the skill links. Without python3 the agent
+# steps are skipped and everything else is still installed. Hermes has no
+# agent files, so each generated personality is set in its config through the
+# hermes CLI. A personality this installer did not set, or one changed since it
+# did, is replaced only with --force; ownership is recorded in
+# ${XDG_STATE_HOME:-~/.local/state}/dotagents/install-state.json. CAI reads
+# agent_sources/ itself, so nothing is installed for it.
 #
 # Skills are linked one directory at a time into a real skills directory that
 # each tool owns. A tool can write its own skills next to ours (Claude Code
@@ -42,15 +43,19 @@
 # directory the same way skills are.
 #
 # Existing paths are never replaced unless --force is given, and a symlink that
-# already points at the right place is reported as already installed.
+# already points at the right place is reported as already installed. A
+# symlink that points elsewhere inside this repository, such as an agent
+# linked from the agents/ directory of an older layout, is ours and is relinked.
 
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 skills_dir="${repo_root}/skills"
-agents_dir="${repo_root}/agents"
 agents_file="${repo_root}/AGENTS.md"
 generated_dir="${repo_root}/generated"
+agents_dir="${generated_dir}/claude/agents"
+agent_sources_dir="${repo_root}/agent_sources"
+generator="${repo_root}/.ci_scripts/generate_agents.py"
 claude_statusline_source="${repo_root}/claude/statusline-command.sh"
 claude_statusline_link="${HOME}/.claude/statusline-command.sh"
 claude_statusline_command="sh ~/.claude/statusline-command.sh"
@@ -66,7 +71,6 @@ no_hermes=0
 no_codex_agents=0
 no_cursor_agents=0
 no_hermes_personalities=0
-no_cai_personas=0
 
 # Targets that receive one symlink per agent file. Only Claude Code reads this
 # file format today, so only its agents directory is linked.
@@ -99,8 +103,7 @@ usage() {
     cat <<'USAGE'
 Usage: install.sh [--dry-run] [--force] [--no-statusline]
                   [--no-attribution] [--no-hermes] [--no-codex-agents]
-                  [--no-cursor-agents] [--no-hermes-personalities]
-                  [--no-cai-personas] [--help]
+                  [--no-cursor-agents] [--no-hermes-personalities] [--help]
 
   --dry-run                  Print the changes that would be made and change nothing.
   --force                    Replace an existing symlink that points somewhere else, or a
@@ -111,7 +114,6 @@ Usage: install.sh [--dry-run] [--force] [--no-statusline]
   --no-codex-agents          Skip linking the generated Codex agents.
   --no-cursor-agents         Skip linking the generated Cursor agents.
   --no-hermes-personalities  Skip setting the generated Hermes personalities.
-  --no-cai-personas          Skip linking the generated CAI personas.
   --help                     Show this message.
 USAGE
 }
@@ -126,7 +128,6 @@ while [ "$#" -gt 0 ]; do
         --no-codex-agents) no_codex_agents=1 ;;
         --no-cursor-agents) no_cursor_agents=1 ;;
         --no-hermes-personalities) no_hermes_personalities=1 ;;
-        --no-cai-personas) no_cai_personas=1 ;;
         -h | --help)
             usage
             exit 0
@@ -139,14 +140,6 @@ while [ "$#" -gt 0 ]; do
     esac
     shift
 done
-
-# CAI's configuration root follows XDG, and a blank override means the default.
-cai_config_root="${XDG_CONFIG_HOME-}"
-cai_config_root="${cai_config_root#"${cai_config_root%%[![:space:]]*}"}"
-cai_config_root="${cai_config_root%"${cai_config_root##*[![:space:]]}"}"
-cai_config_root="${cai_config_root:-${HOME}/.config}/cai"
-cai_present=0
-[ -d "$cai_config_root" ] && cai_present=1
 
 run() {
     if [ "$dry_run" -eq 1 ]; then
@@ -208,7 +201,14 @@ link_one() {
             return 0
         fi
         existing="$(readlink "$link_path")"
-        if [ "$force" -eq 0 ]; then
+        case "$existing" in
+            "$repo_root"/*)
+                echo "  relink: ${link_path} pointed at ${existing} in this repository"
+                run rm -f "$link_path"
+                existing=""
+                ;;
+        esac
+        if [ -n "$existing" ] && [ "$force" -eq 0 ]; then
             echo "  skip: ${link_path} points at ${existing} (use --force to replace)" >&2
             return 0
         fi
@@ -234,6 +234,8 @@ prepare_real_dir() {
     if [ -L "$target" ]; then
         if [ "$(readlink -f "$target")" = "$(readlink -f "$source")" ]; then
             echo "  migrate: ${target} links the whole $(basename "$source") directory; replacing it with a real directory"
+        elif case "$(readlink "$target")" in "$repo_root"/*) true ;; *) false ;; esac; then
+            echo "  migrate: ${target} links $(readlink "$target") in this repository; replacing it with a real directory"
         elif [ "$force" -eq 1 ]; then
             echo "  migrate: ${target} points at $(readlink "$target"); replacing it with a real directory"
         else
@@ -318,41 +320,39 @@ for target in "${per_skill_targets[@]}"; do
 done
 report_non_skill_entries
 
-echo "Claude agents:"
-for target in "${per_agent_targets[@]}"; do
-    prepare_real_dir "$target" "$agents_dir" || continue
-    if [ "$dry_run" -eq 1 ] && [ -L "$target" ]; then
-        echo "  would link each agent into ${target}"
-        continue
-    fi
-    for agent_path in "$agents_dir"/*.md; do
-        agent_name="$(basename "$agent_path")"
-        if [ "$agent_name" = "README.md" ]; then
-            continue
-        fi
-        link_one "$agent_path" "${target}/${agent_name}"
-    done
-    report_extra_agents "$agents_dir" "$target"
-done
+# Generate the agents with the same code `just ci` runs. generated/ lives in
+# this clone and is not installed anywhere by itself, so a dry run generates too.
+agents_available=0
+agents_skip=""
+echo "Agent generation:"
+if [ ! -d "$agent_sources_dir" ] || [ ! -f "$generator" ]; then
+    agents_skip="no agent sources in ${agent_sources_dir}"
+elif ! command -v python3 >/dev/null 2>&1; then
+    agents_skip="python3 not found; install Python 3 to install the agents"
+else
+    python3 "$generator" --root "$repo_root" | while IFS= read -r line; do echo "  ${line}"; done
+    agents_available=1
+fi
+[ -z "$agents_skip" ] || echo "  skip: ${agents_skip}"
 
-# link_generated <label> <switch> <skipped> <present> <presence_path> <source_dir> <target_dir> <extension>
-# Link each generated file into a real directory the tool owns, the same way
-# the Claude agents are linked. A tool whose presence is 0 is skipped.
+# link_generated <label> <switch> <skipped> <source_dir> <target_dir> <extension>
+# Link each generated file into a real directory the tool owns, one file at a
+# time, and report what else is there.
 link_generated() {
-    local label="$1" switch="$2" skipped="$3" present="$4" presence_path="$5"
-    local source_dir="$6" target="$7" extension="$8" path
+    local label="$1" switch="$2" skipped="$3" source_dir="$4" target="$5" extension="$6" path
 
     echo "${label}:"
-    if [ "$skipped" -eq 1 ]; then
+    if [ -n "$switch" ] && [ "$skipped" -eq 1 ]; then
         echo "  skipped (${switch})."
         return 0
     fi
-    if [ "$present" -eq 0 ]; then
-        echo "  skip: ${presence_path} not found"
+    if [ "$agents_available" -eq 0 ]; then
+        echo "  skip: ${agents_skip}"
         return 0
     fi
     if ! compgen -G "${source_dir}/*.${extension}" >/dev/null; then
         echo "  skip: no generated files in ${source_dir}"
+        report_extra_agents "$source_dir" "$target" "$extension"
         return 0
     fi
     prepare_real_dir "$target" "$source_dir" || return 0
@@ -366,12 +366,13 @@ link_generated() {
     report_extra_agents "$source_dir" "$target" "$extension"
 }
 
-link_generated "Codex agents" --no-codex-agents "$no_codex_agents" 1 "${HOME}/.codex" \
+for target in "${per_agent_targets[@]}"; do
+    link_generated "Claude agents" "" 0 "$agents_dir" "$target" md
+done
+link_generated "Codex agents" --no-codex-agents "$no_codex_agents" \
     "${generated_dir}/codex/agents" "${HOME}/.codex/agents" toml
-link_generated "Cursor agents" --no-cursor-agents "$no_cursor_agents" 1 "${HOME}/.cursor" \
+link_generated "Cursor agents" --no-cursor-agents "$no_cursor_agents" \
     "${generated_dir}/cursor/agents" "${HOME}/.cursor/agents" md
-link_generated "CAI personas" --no-cai-personas "$no_cai_personas" "$cai_present" "$cai_config_root" \
-    "${generated_dir}/cai/personas" "${cai_config_root}/personas" md
 
 echo "Global instruction file:"
 for target in "${instruction_targets[@]}"; do
@@ -406,20 +407,26 @@ else
 fi
 echo "Hermes skills:"
 [ -z "$hermes_skip" ] || echo "  ${hermes_skip}"
-if [ "$hermes_enabled" -eq 1 ] && [ "$no_hermes_personalities" -eq 0 ]; then
+personalities_skip="skipped (--no-hermes-personalities)."
+if [ -n "$hermes_skip" ]; then
+    personalities_skip="$hermes_skip"
+elif [ "$agents_available" -eq 0 ]; then
+    personalities_skip="skip: ${agents_skip}"
+fi
+if [ "$hermes_enabled" -eq 1 ] && [ "$no_hermes_personalities" -eq 0 ] && [ "$agents_available" -eq 1 ]; then
     hermes_personalities_enabled=1
 fi
 
 if [ "$no_statusline" -eq 1 ] && [ "$no_attribution" -eq 1 ] && [ "$hermes_enabled" -eq 0 ]; then
     echo "Hermes personalities:"
-    echo "  ${hermes_skip:-skipped (--no-hermes-personalities).}"
+    echo "  ${personalities_skip}"
     echo "Commit attribution: skipped (--no-attribution)."
 else
 # Keep all settings mutations in one process so each file is backed up once.
 python3 - "$dry_run" "$no_statusline" "$no_attribution" \
     "$claude_statusline_command" "$cursor_statusline_command" \
     "$hermes_enabled" "$hermes_home" "$hermes_command" "$skills_dir" \
-    "$hermes_personalities_enabled" "${hermes_skip:-skipped (--no-hermes-personalities).}" \
+    "$hermes_personalities_enabled" "$personalities_skip" \
     "${generated_dir}/hermes/personalities" "$force" <<'SETTINGS_PY'
 import hashlib
 import json
@@ -665,9 +672,11 @@ def personality_digest(value):
 
 
 def read_personality_file(path):
-    """Read a generated personality: two lines, each a key and a JSON string."""
+    """Read a generated personality: a comment, then two lines, each a key and a JSON string."""
     value = {}
     for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#"):
+            continue
         key, separator, raw = line.partition(": ")
         if not separator or key not in ("description", "system_prompt") or key in value:
             raise ValueError("%s: unexpected line %r" % (path, line[:40]))

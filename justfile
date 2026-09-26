@@ -14,50 +14,16 @@ default:
 
 # Install the tooling the checks below need.
 setup: install-markdownlint
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd "{{ root_dir }}"
-    if command -v uv >/dev/null 2>&1; then
-        uv sync --locked --quiet --project tools/agentgen
-        echo "Agent generator environment ready in tools/agentgen/.venv."
-    else
-        echo "Warning: uv not found; just ci needs it to generate agents from agent_sources/."
-        echo "Install it: https://docs.astral.sh/uv/getting-started/installation/"
-    fi
-    echo "Setup complete. Run: just ci"
+    @echo "Setup complete. Run: just ci"
 
 # Local CI: everything that gates a merge in this repository. Agents are
-# generated first, so every later check sees the regenerated files.
-ci: generate-agents docs-check validate-skills validate-agents validate-skills-spec test-python test-agentgen test-powershell lint-sh
+# generated first, so every later check sees the current generated files.
+ci: generate-agents docs-check validate-skills validate-agents validate-skills-spec test-python test-powershell lint-sh
     @:
 
-# Regenerate agents/ and generated/ from agent_sources/, or only check them under CI.
+# Generate every tool's agent files from agent_sources/ into generated/, which is not committed.
 generate-agents:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd "{{ root_dir }}"
-    command -v uv >/dev/null 2>&1 || {
-        echo "Error: uv not found. Install it (https://docs.astral.sh/uv/getting-started/installation/) and retry."
-        exit 1
-    }
-    # Write locally; under CI (the CI environment variable is set), only check.
-    mode=()
-    case "$(printf '%s' "${CI:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
-        "" | 0 | false) ;;
-        *) mode=(--check) ;;
-    esac
-    uv run --locked --quiet --project tools/agentgen agentgen generate --root . "${mode[@]}"
-
-# Rewrite every generated file from agent_sources/, discarding hand edits, such as after a merge conflict.
-generate-agents-accept-source:
-    @cd "{{ root_dir }}" && uv run --locked --quiet --project tools/agentgen agentgen generate --root . --accept-source
-
-# Run the agent generator's unit tests in its locked environment.
-test-agentgen:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd "{{ root_dir }}/tools/agentgen"
-    uv run --locked --quiet python -m unittest discover -s tests -t .
+    @python3 "{{ root_dir }}/.ci_scripts/generate_agents.py"
 
 # All documentation checks: Markdown lint plus internal link validation.
 docs-check: lint-md validate-doc-links
@@ -89,6 +55,7 @@ install-markdownlint:
 # omit for the whole repo.
 # The whole-repo run skips symlinked entries in skills/, such as locally linked
 # system skills: their content is not ours, and --fix would rewrite the target.
+# It also skips generated/, which holds uncommitted output of agent_sources/.
 lint-md *PATHS:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -108,6 +75,8 @@ lint-md *PATHS:
         while IFS= read -r link; do
             excludes+=("!${link}/**" "!${link}")
         done < <(find skills -mindepth 1 -maxdepth 1 -type l | sort)
+        # Generated agents are not committed; their sources in agent_sources/ are linted instead.
+        excludes+=("!generated/**" "!.generated.*/**")
         markdownlint-cli2 "${fix[@]}" '**/*.md' "${excludes[@]}"
     else
         markdownlint-cli2 "${fix[@]}" {{ PATHS }}
@@ -117,9 +86,9 @@ lint-md *PATHS:
 validate-skills:
     @python3 "{{ root_dir }}/.ci_scripts/validate_skills.py" "{{ root_dir }}/skills"
 
-# Validate Claude Code agent frontmatter, preloaded skills, and the agent index.
-validate-agents:
-    @python3 "{{ root_dir }}/.ci_scripts/validate_agents.py" "{{ root_dir }}/agents" "{{ root_dir }}/skills"
+# Validate the generated Claude Code agents, their preloaded skills, and the agent index.
+validate-agents: generate-agents
+    @python3 "{{ root_dir }}/.ci_scripts/validate_agents.py" "{{ root_dir }}/generated/claude/agents" "{{ root_dir }}/skills" --index "{{ root_dir }}/agent_sources/README.md"
 
 # Validate skills with the Agent Skills reference validator (skills-ref). Skipped locally, and an error under CI, when it is absent.
 validate-skills-spec:
@@ -189,7 +158,7 @@ lint-sh:
     fi
     shellcheck scripts/*.sh claude/*.sh cursor/*.sh
 
-# Link the skills, generated agents, and global AGENTS.md into each tool, and register Hermes skills and personalities.
+# Generate the agents, link them, the skills, and the global AGENTS.md into each tool, and register Hermes skills and personalities.
 install *ARGS:
     @bash "{{ root_dir }}/scripts/install.sh" {{ ARGS }}
 
@@ -202,5 +171,5 @@ clean:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{ root_dir }}"
-    rm -rf .markdownlint-repo .markdownlint-rules .ci_scripts/__pycache__ tools/agentgen/.venv
+    rm -rf .markdownlint-repo .markdownlint-rules .ci_scripts/__pycache__ generated
     echo "Removed local lint tooling and caches."

@@ -286,7 +286,8 @@ else:
     def generated_personality(self, name):
         path = REPO / "generated/hermes/personalities" / (name + ".yaml")
         return {key: json.loads(value) for key, value in
-                (line.split(": ", 1) for line in path.read_text(encoding="utf-8").splitlines())}
+                (line.split(": ", 1) for line in path.read_text(encoding="utf-8").splitlines()
+                 if not line.startswith("#"))}
 
     def state(self):
         path = self.home / ".local/state/dotagents/install-state.json"
@@ -605,7 +606,10 @@ else:
         tools = self.home / "test-bin"
         tools.mkdir()
         python = tools / "python3"
-        python.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+        # Agent generation still runs python3 on a file; only the settings script,
+        # read from standard input, must not be needed.
+        python.write_text('#!/bin/sh\n[ "$1" = "-" ] && exit 99\nexec "%s" "$@"\n' % sys.executable,
+                          encoding="utf-8")
         python.chmod(0o755)
         result = subprocess.run(
             ["bash", str(REPO / "scripts/install.sh"), "--no-statusline", "--no-attribution"],
@@ -620,6 +624,21 @@ else:
             self.assertEqual(path.read_bytes(), original)
             self.assertEqual(self.backups(path), [])
 
+
+HELPER_SOURCE = """---
+schema: 1
+name: helper
+description: Helps with sample work.
+model: standard
+color: blue
+skills: [alpha]
+---
+# Helper
+
+## Role
+
+You help.
+"""
 
 SKILL_TARGETS = (".claude/skills", ".cursor/skills", ".gemini/config/skills",
                  ".copilot/skills", ".codex/skills", ".grok/skills")
@@ -639,13 +658,12 @@ class InstallSkillLinksTest(unittest.TestCase):
         self.repo = root / "repo"
         (self.repo / "scripts").mkdir(parents=True)
         shutil.copy(REPO / "scripts/install.sh", self.repo / "scripts/install.sh")
-        (self.repo / "agents").mkdir()
-        (self.repo / "agents/helper.md").write_text("Agent\n", encoding="utf-8")
+        (self.repo / ".ci_scripts").mkdir()
+        shutil.copy(REPO / ".ci_scripts/generate_agents.py", self.repo / ".ci_scripts/generate_agents.py")
+        (self.repo / "agent_sources").mkdir()
+        (self.repo / "agent_sources/README.md").write_text("# Agent Index\n", encoding="utf-8")
+        (self.repo / "agent_sources/helper.md").write_text(HELPER_SOURCE, encoding="utf-8")
         (self.repo / "AGENTS.md").write_text("Global\n", encoding="utf-8")
-        for relative in ("generated/codex/agents/helper.toml", "generated/cursor/agents/helper.md",
-                         "generated/cai/personas/helper.md"):
-            (self.repo / relative).parent.mkdir(parents=True)
-            (self.repo / relative).write_text("Generated\n", encoding="utf-8")
         for name in ("alpha", "beta"):
             (self.repo / "skills" / name).mkdir(parents=True)
             (self.repo / "skills" / name / "SKILL.md").write_text("Skill\n", encoding="utf-8")
@@ -705,19 +723,31 @@ class InstallSkillLinksTest(unittest.TestCase):
         self.assertFalse((self.skills / "vendored").exists())
 
     def test_whole_agents_directory_link_from_older_install_is_migrated(self) -> None:
+        # Older installs linked ~/.claude/agents to the repository's agents/ directory.
+        (self.repo / "agents").mkdir()
         link = self.home / ".claude/agents"
         link.parent.mkdir()
         link.symlink_to(self.repo / "agents", target_is_directory=True)
         result = self.install("--dry-run")
-        self.assertIn("would link each agent into", result.stdout)
+        self.assertIn("would link each file into", result.stdout)
         self.assertTrue(link.is_symlink())
         self.install()
         self.assertTrue(link.is_dir() and not link.is_symlink())
         self.assertEqual(sorted(p.name for p in link.iterdir()), ["helper.md"])
-        self.assertEqual((link / "helper.md").resolve(), (self.repo / "agents/helper.md").resolve())
+        self.assertEqual((link / "helper.md").resolve(),
+                         (self.repo / "generated/claude/agents/helper.md").resolve())
         # An agent the tool or user adds stays out of the repository.
         (link / "local.md").write_text("Local\n", encoding="utf-8")
-        self.assertFalse((self.repo / "agents/local.md").exists())
+        self.assertFalse((self.repo / "generated/claude/agents/local.md").exists())
+
+    def test_agent_links_from_the_older_layout_are_relinked(self) -> None:
+        agents = self.home / ".claude/agents"
+        agents.mkdir(parents=True)
+        (agents / "helper.md").symlink_to(self.repo / "agents/helper.md")
+        result = self.install()
+        self.assertIn("relink: %s" % (agents / "helper.md"), result.stdout)
+        self.assertEqual((agents / "helper.md").resolve(),
+                         (self.repo / "generated/claude/agents/helper.md").resolve())
 
     def test_foreign_directory_link_needs_force(self) -> None:
         elsewhere = self.home / "elsewhere"
@@ -752,50 +782,63 @@ class InstallSkillLinksTest(unittest.TestCase):
         self.assertIn("stale: gone", result.stderr)
 
     GENERATED = (
-        ("Codex agents", ".codex", ".codex/agents", "generated/codex/agents", "helper.toml", "--no-codex-agents"),
-        ("Cursor agents", ".cursor", ".cursor/agents", "generated/cursor/agents", "helper.md", "--no-cursor-agents"),
-        ("CAI personas", ".config/cai", ".config/cai/personas", "generated/cai/personas", "helper.md",
-         "--no-cai-personas"),
+        ("Claude agents", ".claude/agents", "generated/claude/agents", "helper.md", None),
+        ("Codex agents", ".codex/agents", "generated/codex/agents", "helper.toml", "--no-codex-agents"),
+        ("Cursor agents", ".cursor/agents", "generated/cursor/agents", "helper.md", "--no-cursor-agents"),
     )
 
-    def test_generated_files_are_linked_per_file(self) -> None:
-        (self.home / ".config/cai").mkdir(parents=True)
-        self.install()
-        for label, _, target, source, name, _ in self.GENERATED:
+    def test_install_generates_and_links_each_file(self) -> None:
+        result = self.install()
+        self.assertIn("generate_agents: 4 files for 1 agents", result.stdout)
+        for label, target, source, name, _ in self.GENERATED:
             with self.subTest(label=label):
                 directory = self.home / target
                 self.assertTrue(directory.is_dir() and not directory.is_symlink())
+                self.assertEqual(sorted(p.name for p in directory.iterdir()), [name])
                 self.assertTrue((directory / name).is_symlink())
                 self.assertEqual((directory / name).resolve(), (self.repo / source / name).resolve())
-
-    def test_cai_step_needs_its_configuration_root(self) -> None:
-        result = self.install()
-        self.assertIn("skip: %s not found" % (self.home / ".config/cai"), result.stdout)
         self.assertFalse((self.home / ".config").exists())
+        self.assertNotIn("CAI", result.stdout)
+
+    def test_regeneration_keeps_links_current_and_drops_removed_agents(self) -> None:
+        self.install()
+        source = self.repo / "agent_sources/helper.md"
+        source.write_text(HELPER_SOURCE.replace("You help.", "You help more."), encoding="utf-8")
+        self.install()
+        self.assertIn("You help more.", (self.home / ".claude/agents/helper.md").read_text())
+        source.unlink()
+        result = self.install()
+        self.assertIn("stale: helper.md", result.stderr)
+        self.assertTrue((self.home / ".claude/agents/helper.md").is_symlink())
 
     def test_generated_steps_honor_their_switches_and_dry_run(self) -> None:
-        for _, root, _, _, _, _ in self.GENERATED:
-            (self.home / root).mkdir(parents=True, exist_ok=True)
         result = self.install("--dry-run")
-        for _, _, target, _, _, _ in self.GENERATED:
+        for _, target, _, _, _ in self.GENERATED:
             self.assertFalse((self.home / target).exists(), target)
         self.assertIn("would run: ln -sfn", result.stdout)
-        result = self.install(*(switch for *_, switch in self.GENERATED))
-        for _, _, target, _, _, switch in self.GENERATED:
+        result = self.install(*(switch for *_, switch in self.GENERATED if switch))
+        for _, target, _, _, switch in self.GENERATED[1:]:
             self.assertIn("skipped (%s)." % switch, result.stdout)
             self.assertFalse((self.home / target).exists(), target)
 
-    def test_cai_personas_follow_xdg_config_home(self) -> None:
-        config = self.home / "xdg config"
-        (config / "cai").mkdir(parents=True)
-        (self.home / ".config/cai").mkdir(parents=True)
-        self.env["XDG_CONFIG_HOME"] = str(config)
-        self.install()
-        self.assertTrue((config / "cai/personas/helper.md").is_symlink())
-        self.assertFalse((self.home / ".config/cai/personas").exists())
-        self.env["XDG_CONFIG_HOME"] = "  "
-        self.install()
-        self.assertTrue((self.home / ".config/cai/personas/helper.md").is_symlink())
+    def test_invalid_source_fails_the_install(self) -> None:
+        (self.repo / "agent_sources/helper.md").write_text(HELPER_SOURCE.replace("schema: 1", "schema: 9"))
+        result = self.install(check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("schema must be 1", result.stderr)
+
+    def test_without_python_agents_are_skipped_and_skills_installed(self) -> None:
+        tools = self.home / "no-python-bin"
+        tools.mkdir()
+        for command in ("bash", "dirname", "basename", "readlink", "mkdir", "ln", "rm", "find", "sort", "sed"):
+            executable = shutil.which(command)
+            if executable:
+                (tools / command).symlink_to(executable)
+        self.env["PATH"] = str(tools)
+        result = self.install()
+        self.assertIn("skip: python3 not found", result.stdout)
+        self.assertFalse((self.home / ".claude/agents").exists())
+        self.assertTrue((self.home / ".claude/skills/alpha").is_symlink())
 
     def test_generated_collisions_and_leftovers_are_reported_not_replaced(self) -> None:
         agents = self.home / ".cursor/agents"
@@ -813,6 +856,7 @@ class InstallSkillLinksTest(unittest.TestCase):
     def test_whole_generated_directory_link_is_migrated(self) -> None:
         link = self.home / ".codex/agents"
         link.parent.mkdir()
+        (self.repo / "generated/codex/agents").mkdir(parents=True)
         link.symlink_to(self.repo / "generated/codex/agents", target_is_directory=True)
         result = self.install("--dry-run")
         self.assertIn("would link each file into", result.stdout)
@@ -821,11 +865,10 @@ class InstallSkillLinksTest(unittest.TestCase):
         self.assertTrue(link.is_dir() and not link.is_symlink())
         self.assertEqual(sorted(p.name for p in link.iterdir()), ["helper.toml"])
 
-    def test_missing_generated_directory_is_skipped(self) -> None:
-        shutil.rmtree(self.repo / "generated")
-        (self.home / ".codex").mkdir()
+    def test_missing_agent_sources_skip_agent_steps(self) -> None:
+        shutil.rmtree(self.repo / "agent_sources")
         result = self.install()
-        self.assertIn("skip: no generated files in", result.stdout)
+        self.assertIn("skip: no agent sources", result.stdout)
         self.assertFalse((self.home / ".codex/agents").exists())
 
     def test_reinstall_reports_already_linked(self) -> None:

@@ -6,7 +6,7 @@ Each subdirectory here is one skill, addressed by its directory name and defined
 Agent tools read this directory through installed links, Hermes Agent external-directory registration, or CAI native discovery of `~/.agents/skills/`.
 Changes take effect through each consumer's normal reload or session-start behavior; CAI watches its shared roots.
 See [Skill Authoring Standards](../docs/docs_standards/skill_authoring.md) before adding or editing a skill.
-The Claude Code agents in [`agents/`](../agents/README.md) preload skills from here by name, so renaming a skill also breaks any agent that lists it.
+The agents in [`agent_sources/`](../agent_sources/README.md) preload skills from here by name, so renaming a skill also breaks any agent that lists it.
 
 These skills are opinionated and reflect my own experience working with AI coding tools; see [Scope and Point of View](../README.md#scope-and-point-of-view) for the assumptions they carry and what to adapt before using them in another repository.
 The skills are licensed under CC BY 4.0 and carry no per-file license notice; see [Licensing](../CONTRIBUTING.md#licensing) for how to attribute one you copy or adapt.

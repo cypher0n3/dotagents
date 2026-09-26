@@ -3,7 +3,7 @@
 ## Overview
 
 This directory holds the documentation for the repository itself.
-The skills it distributes are indexed separately in [Skill Index](../skills/README.md), and the Claude Code agents that preload them in [Agent Index](../agents/README.md).
+The skills it distributes are indexed separately in [Skill Index](../skills/README.md), and the Claude Code agents that preload them in [Agent Index](../agent_sources/README.md).
 
 ## Contents
 

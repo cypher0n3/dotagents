@@ -2,7 +2,7 @@
 
 [![License: MIT + CC BY 4.0](https://img.shields.io/badge/License-MIT%20%2B%20CC%20BY%204.0-blue.svg)](LICENSE)
 [![Skills](https://img.shields.io/badge/skills-21-blueviolet)](skills/README.md)
-[![Agents](https://img.shields.io/badge/agents-9-blueviolet)](agents/README.md)
+[![Agents](https://img.shields.io/badge/agents-9-blueviolet)](agent_sources/README.md)
 [![Docs](https://img.shields.io/badge/docs-standards-informational)](docs/docs_standards/README.md)
 
 ## Overview
@@ -11,7 +11,8 @@ These are my agent skills and instructions, kept in one place and shared across 
 One directory under [`skills/`](skills/README.md) is one skill.
 Claude Code, Codex, Cursor, Gemini, Grok, and GitHub Copilot in VS Code read that directory through symlinks; Hermes Agent scans it as an external skill directory, and CAI discovers `~/.agents/skills/` natively.
 I edit a skill once and consumers pick it up through their normal reload or session-start behavior.
-One role under [`agent_sources/`](agent_sources/README.md) is one agent that preloads the skills it needs, written once and generated as a Claude Code subagent in [`agents/`](agents/README.md), a Codex agent, a Cursor agent, a Hermes personality, and a CAI persona, each installed the way its tool expects.
+One file under [`agent_sources/`](agent_sources/README.md) is one agent that preloads the skills it needs, and is the only place that agent is written.
+`just ci` and `just install` generate it as a Claude Code subagent, a Codex agent, a Cursor agent, and a Hermes personality, each installed the way its tool expects, and CAI reads the file directly.
 
 They are personal and opinionated; see [Scope and Point of View](#scope-and-point-of-view) before adopting them wholesale.
 
@@ -36,22 +37,22 @@ Where a skill can discover a convention from the repository it is running in, I 
 
 - 🧩 **One source of truth**: every agent tool reads the same `skills/` directory through links or external-directory registration; there are no per-tool copies to drift.
 - 🤖 **Agents built on skills**: a coder, two reviewers, test runner, researcher, planner, spec author, feature author, and docs writer, each preloading the skills for its role, with a model chosen per role.
-- 🧬 **One role, five tools**: each agent is authored once and generated for Claude Code, Codex, Cursor, Hermes, and CAI, with every restriction a tool cannot enforce stated rather than dropped.
+- 🧬 **One file per agent**: each agent is written once in `agent_sources/` and generated for Claude Code, Codex, Cursor, and Hermes, which CAI reads directly, with every restriction a tool cannot enforce stated rather than dropped.
 - 🔗 **One-command install**: `just install` creates the links each tool expects and registers the skills and personalities with an existing Hermes setup; `just install-dry-run` shows the plan first.
-- ✅ **Validated**: `just ci` regenerates the agents, then checks skill frontmatter, naming, agent manifests, agent definitions, Markdown conventions, and internal links.
+- ✅ **Validated**: `just ci` generates the agents, then checks skill frontmatter, naming, agent manifests, agent definitions, Markdown conventions, and internal links.
 - 📐 **Documented conventions**: the frontmatter contract and prose rules live in [docs/docs_standards/](docs/docs_standards/README.md), not in reviewers' heads.
-- 🪶 **Few dependencies**: the checks are Python standard library plus `markdownlint-cli2`, and the agent generator runs in a `uv`-locked environment, so a fresh clone validates with one `just setup`.
+- 🪶 **No dependencies**: the checks and the agent generator are Python standard library plus `markdownlint-cli2`, so a fresh clone validates immediately.
 
 ## Quick Start
 
-Install [`just`](https://github.com/casey/just), [`markdownlint-cli2`](https://github.com/DavidAnson/markdownlint-cli2), and [`uv`](https://docs.astral.sh/uv/getting-started/installation/), then clone and install:
+Install [`just`](https://github.com/casey/just), [`markdownlint-cli2`](https://github.com/DavidAnson/markdownlint-cli2), and Python 3, then clone and install:
 
 ```bash
 git clone https://github.com/cypher0n3/dotagents.git ~/.agents
 cd ~/.agents
-just setup            # fetch the custom markdownlint rules and the generator's dependencies
-just install-dry-run  # review the links that would be created, changing nothing
-just install          # install supported links and register Hermes skills
+just setup            # fetch the custom markdownlint rules
+just install-dry-run  # generate the agents and review the links that would be created
+just install          # generate the agents, install supported links, and register with Hermes
 just ci               # run the full local check suite
 ```
 
@@ -92,11 +93,12 @@ Use `just --list` to see every recipe.
 
 `just install` creates three kinds of link, because the agent tools disagree about what a skills directory is and about where global instructions live.
 
-- Per-agent links, one symlink per generated agent file: `agents/` into `~/.claude/agents`, `generated/codex/agents/` into `~/.codex/agents`, `generated/cursor/agents/` into `~/.cursor/agents`, and `generated/cai/personas/` into CAI's personas directory (see [CAI](#cai)).
+- Per-agent links, one symlink per generated agent file: `generated/claude/agents/` into `~/.claude/agents`, `generated/codex/agents/` into `~/.codex/agents`, and `generated/cursor/agents/` into `~/.cursor/agents`.
+  The installer first generates them from `agent_sources/` with `.ci_scripts/generate_agents.py`, the same code `just ci` runs; `generated/` is never committed, and without Python the agent steps are skipped.
   Each tool gets the files generated in its own format, because another tool's compatibility reader does not establish support for every field.
   Linking file by file leaves any agent already sitting there untouched, and an older install that linked a whole agent directory is migrated to a real directory the same way skills are.
   Anything in those directories this repository does not provide is reported at the end of the run and never removed, so a renamed agent's dangling link is visible without putting your own agents at risk.
-  `--no-codex-agents`, `--no-cursor-agents`, and `--no-cai-personas` skip their step.
+  `--no-codex-agents` and `--no-cursor-agents` skip their step, and a link left by the older `agents/` layout is relinked without `--force`.
 - Per-skill links, one symlink per skill inside a real directory the tool manages itself: `~/.claude/skills`, `~/.cursor/skills`, `~/.gemini/config/skills`, `~/.copilot/skills`, `~/.codex/skills`, and `~/.grok/skills`.
   A tool can write its own skills next to yours (Claude Code syncs vendored ones into `~/.claude/skills`), and a symlink to `skills/` as a whole would land that content in this repository.
   An older install that linked `skills/` as a whole is migrated to a real directory, a `skills/` entry without a `SKILL.md` is never linked, and a link to a skill that no longer exists is reported and left in place.
@@ -145,13 +147,13 @@ HERMES_HOME="$HOME/.hermes" hermes config get skills.external_dirs --json
 
 For a custom home or profile, substitute the same `HERMES_HOME` used during installation so a sticky profile cannot redirect the check.
 
-Hermes has no agent files, so each role is also set as a personality under `agent.personalities.<name>`, through `hermes config set`, from `generated/hermes/personalities/`.
+Hermes has no agent files, so each agent is also set as a personality under `agent.personalities.<name>`, through `hermes config set`, from `generated/hermes/personalities/`.
 Personalities apply to a whole session once selected with `/personality`, and the installer never selects one.
 
 - An absent personality is added, and an unchanged one is left alone.
 - The installer records a digest of each personality it sets in `${XDG_STATE_HOME:-~/.local/state}/dotagents/install-state.json`, and updates a personality without `--force` only while its value still matches that record.
 - A personality of the same name that the installer did not set, or that you edited after it did, is skipped unless you pass `--force`; the previous value survives in the configuration backup.
-- A personality whose role no longer exists is reported and left in place.
+- A personality whose agent no longer exists is reported and left in place.
 - `--no-hermes-personalities` skips this step; `--no-hermes` skips it and the skill registration.
 
 This integration does not share Claude Code's status-line implementation.
@@ -202,16 +204,15 @@ Current compatibility boundaries are deliberate:
 - The tracked regular skill packages match CAI's package layout; symlinked child packages such as locally linked system skills are skipped by its scanner.
 - CAI does not automatically read `~/.agents/AGENTS.md` as global instructions and rejects symlinked instruction files.
   The shared repository's `AGENTS.override.md` is repository-specific, not a global instruction source.
-- Each role is also generated as a CAI persona in `generated/cai/personas/`, with required and suggested skills as native fields and read-only and tool limits as commented keys CAI does not enforce.
-  `just install` links each persona into `$XDG_CONFIG_HOME/cai/personas/`, falling back to `~/.config/cai/personas/`, only when that CAI configuration root exists, and `--no-cai-personas` skips the step.
-  CAI must accept symlinked persona files for the links to load; until then it reports each one as not a regular file.
+- CAI is meant to read the agents in `~/.agents/agent_sources/` directly, as it reads `~/.agents/skills/`, so nothing is generated or installed for it; see [CAI Native Agent Sources](docs/draft_specs/cai-native-agent-sources.md) for the CAI change this needs.
+  Until CAI ships it, CAI does not see these agents.
 - CAI does not enforce `user-invocable` or `disable-model-invocation` as activation policy, and `allowed-tools` declarations do not grant or restrict authority.
   Skill prose does not replace host-side approvals or sandbox policy.
 - [`detailed-execution-planner`](skills/detailed-execution-planner/SKILL.md) selects a native CAI planning workflow separately from Cursor's plan format.
   [`update-cursor-todos`](skills/update-cursor-todos/SKILL.md) remains Cursor-only.
 
 CAI's shared-configuration proposal, draft 470, is deferred; this integration does not depend on its proposed runtime adapters or configuration keys.
-[Shared Agent Templates](docs/specs/shared-agent-templates.md) specifies how the personas and every other tool's agents are generated.
+[Shared Agent Templates](docs/specs/shared-agent-templates.md) specifies how each tool's agents come from the shared sources.
 
 ### Cursor CLI Configuration Location
 
@@ -239,14 +240,12 @@ Dry runs, unchanged files, and files first created by the current install produc
 ## Repository Layout
 
 - [skills/](skills/README.md) - the skills themselves, one directory per skill, indexed by category.
-- [agent_sources/](agent_sources/README.md) - the agent roles, their prompts, and each tool's profile and template.
-- [agents/](agents/README.md) - the generated Claude Code subagents, one file per agent, each preloading the skills for its role.
-- `generated/` - the generated Codex agents, Cursor agents, Hermes personalities, and CAI personas, with the generation manifest.
-- [tools/agentgen/](tools/agentgen/README.md) - the generator that renders `agent_sources/` into `agents/` and `generated/`.
+- [agent_sources/](agent_sources/README.md) - one file per agent, the only place an agent is written, and the agent index.
+- `generated/` - each tool's agents, generated from `agent_sources/` by `just ci` and `just install` and never committed.
 - [docs/](docs/README.md) - documentation for this repository.
 - [docs/docs_standards/](docs/docs_standards/README.md) - skill, agent, and Markdown authoring standards.
 - [docs/specs/](docs/specs/README.md) - specifications for implemented designs.
-- [.ci_scripts/](.ci_scripts/README.md) - dependency-free validation helpers and their unit tests.
+- [.ci_scripts/](.ci_scripts/README.md) - dependency-free validation helpers, the agent generator, and their unit tests.
 - [scripts/](scripts/install.sh) - the installers.
 - [claude/](claude/statusline-command.sh) - Claude Code configuration kept in this repository and linked into `~/.claude`.
 - [cursor/](cursor/statusline-command.sh) - Cursor CLI configuration kept in this repository and linked into `~/.cursor`.
@@ -267,20 +266,20 @@ Run `just install` again to link the new skill into every tool's skills director
 
 ## Adding an Agent
 
-Create `agent_sources/roles/<agent-name>.yaml` with its `name`, `description`, `body`, `targets`, model alias, required skills, restrictions, and Claude color, and write its system prompt under a single H1 in `agent_sources/prompts/<agent-name>.md`.
-The `name` must match the filename, every skill must exist under `skills/`, and the agent must be linked from [agents/README.md](agents/README.md).
-See [`agent_sources/`](agent_sources/README.md) for the layout and an existing role for the shape.
+Create `agent_sources/<agent-name>.md` with `schema`, `name`, `description`, `model`, and `color` front matter, list the skills it preloads under `skills`, and write its instructions under a single H1.
+The `name` must match the filename, every skill must exist under `skills/`, and the agent must be linked from [the agent index](agent_sources/README.md).
+Copy an existing agent for the shape, and see [Shared Agent Templates](docs/specs/shared-agent-templates.md#agent-source-files) for every key.
 
-Read [Agent Authoring Standards](docs/docs_standards/agent_authoring.md) first, then run `just ci`, which generates `agents/<agent-name>.md` and each other tool's version, and commit the generated files with the source.
+Read [Agent Authoring Standards](docs/docs_standards/agent_authoring.md) first, then run `just ci`, which generates and validates every tool's version; commit only the source.
 Run `just install` again to link the new agent into each tool, since agents are linked one file at a time.
 
 ## Documentation
 
 - [Skill Index](skills/README.md) - every skill, grouped by what it is for.
-- [Agent Index](agents/README.md) - every Claude Code agent, with its model and the skills it preloads.
+- [Agent Index](agent_sources/README.md) - every agent, with its model tier and the skills it preloads.
 - [Skill Authoring Standards](docs/docs_standards/skill_authoring.md) - the rules a skill must follow.
 - [Agent Authoring Standards](docs/docs_standards/agent_authoring.md) - the rules an agent must follow.
-- [Shared Agent Templates](docs/specs/shared-agent-templates.md) - how each agent role is generated and installed for every tool.
+- [Shared Agent Templates](docs/specs/shared-agent-templates.md) - how each agent is generated and installed for every tool.
 - [Markdown Conventions](docs/docs_standards/markdown_conventions.md) - the prose and lint conventions.
 - [meta.md](meta.md) - orientation for agents, and this repository's boundaries.
 

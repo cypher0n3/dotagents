@@ -7,4 +7,4 @@ A proposal starts in [Draft Specifications](../draft_specs/README.md) and moves 
 
 ## Implemented Designs
 
-- [Shared Agent Templates](shared-agent-templates.md) - role sources under `agent_sources/` rendered into native Claude Code agents, Codex agents, Cursor agents, Hermes personalities, and CAI personas, with the installer steps that deliver them.
+- [Shared Agent Templates](shared-agent-templates.md) - one source file per agent in `agent_sources/`, generated into Claude Code, Codex, and Cursor agents and Hermes personalities, read directly by CAI, and installed by both installers.

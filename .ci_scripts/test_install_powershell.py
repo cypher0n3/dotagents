@@ -89,7 +89,7 @@ class PowerShellInstallerTests(unittest.TestCase):
                       self.home / ".cursor/cli-config.json",
                       self.home / ".codex/config.toml"]
 
-    def run_installer(self, *flags, setup="", check=True, extra_env=None, personalities=False):
+    def run_installer(self, *flags, setup="", check=True, extra_env=None, personalities=False, copy=True):
         assert PWSH is not None
         # Settings and skill-registration tests leave personalities to their own tests.
         if not personalities:
@@ -111,7 +111,7 @@ class PowerShellInstallerTests(unittest.TestCase):
             "$ErrorActionPreference = 'Stop'; "
             "Set-Variable -Name HOME -Value $env:DOTAGENTS_TEST_HOME -Force; "
             + setup + "; $originalHermesHome = $env:HERMES_HOME; "
-            "try { & $env:DOTAGENTS_TEST_INSTALLER -Copy " + " ".join(flags)
+            "try { & $env:DOTAGENTS_TEST_INSTALLER " + ("-Copy " if copy else "") + " ".join(flags)
             + " } finally { if ($env:HERMES_HOME -cne $originalHermesHome) { throw 'home not restored' } }"
         )
         result = subprocess.run(
@@ -334,7 +334,8 @@ class PowerShellInstallerTests(unittest.TestCase):
 
     def generated_personality(self, name):
         text = (REPO / "generated/hermes/personalities" / (name + ".yaml")).read_text(encoding="utf-8")
-        return {key: json.loads(value) for key, value in (line.split(": ", 1) for line in text.splitlines())}
+        return {key: json.loads(value) for key, value in (line.split(": ", 1) for line in text.splitlines()
+                                                         if not line.startswith("#"))}
 
     def state_path(self):
         base = self.home / ("AppData/Local" if os.name == "nt" else ".local/state")
@@ -419,33 +420,69 @@ class PowerShellInstallerTests(unittest.TestCase):
         self.assertIn("verification failed", result.stderr)
         self.assertEqual(self.personalities(failing), {})
 
-    def test_generated_agents_are_installed_per_file(self):
-        self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes")
-        for target, source, pattern in ((".codex/agents", "generated/codex/agents", "*.toml"),
-                                        (".cursor/agents", "generated/cursor/agents", "*.md")):
+    GENERATED = ((".claude/agents", "generated/claude/agents", "*.md"),
+                 (".codex/agents", "generated/codex/agents", "*.toml"),
+                 (".cursor/agents", "generated/cursor/agents", "*.md"))
+
+    def test_install_generates_and_installs_agents_per_file(self):
+        result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes")
+        self.assertIn("generate_agents: ", result.stdout)
+        for target, source, pattern in self.GENERATED:
             with self.subTest(target=target):
                 expected = sorted(p.name for p in (REPO / source).glob(pattern))
                 self.assertTrue(expected)
                 self.assertEqual(sorted(p.name for p in (self.home / target).iterdir()), expected)
                 for name in expected:
                     self.assertEqual((self.home / target / name).read_bytes(), (REPO / source / name).read_bytes())
+        self.assertNotIn("CAI", result.stdout)
 
-    def test_generated_agent_switches_and_cai_report(self):
+    def test_symbolic_links_are_used_when_available(self):
+        if os.name == "nt":
+            self.skipTest("the Windows runner's symbolic link rights are not controlled here")
+        result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes", copy=False)
+        self.assertIn("agent files are installed as symbolic links", result.stdout)
+        link = self.home / ".claude/agents/reviewer.md"
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(link.resolve(), (REPO / "generated/claude/agents/reviewer.md").resolve())
+        result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes", copy=False)
+        self.assertIn("ok: " + str(link) + " (already linked)", result.stdout)
+
+    def test_older_layout_links_and_owned_copies_become_symbolic_links(self):
+        if os.name == "nt":
+            self.skipTest("the Windows runner's symbolic link rights are not controlled here")
+        self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes")
+        copied = self.home / ".claude/agents/coder.md"
+        self.assertFalse(copied.is_symlink())
+        old = self.home / ".claude/agents/reviewer.md"
+        old.unlink()
+        old.symlink_to(REPO / "agents/reviewer.md")
+        result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes", copy=False)
+        self.assertIn("relink: " + str(old), result.stdout)
+        self.assertEqual(old.resolve(), (REPO / "generated/claude/agents/reviewer.md").resolve())
+        self.assertTrue(copied.is_symlink())
+
+    def test_generated_agent_switches(self):
         result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes",
-                                    "-NoCodexAgents", "-NoCursorAgents", "-NoCaiPersonas")
+                                    "-NoCodexAgents", "-NoCursorAgents")
         self.assertIn("skipped (-NoCodexAgents).", result.stdout)
         self.assertIn("skipped (-NoCursorAgents).", result.stdout)
-        self.assertIn("skipped (-NoCaiPersonas).", result.stdout)
         self.assertFalse((self.home / ".codex/agents").exists())
         self.assertFalse((self.home / ".cursor/agents").exists())
-        result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes", "-DryRun")
-        self.assertIn("install them with scripts/install.sh", result.stdout)
+        self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes", "-DryRun")
         self.assertFalse((self.home / ".codex/agents").exists())
+
+    def test_without_python_agent_steps_are_skipped(self):
+        path = self.seed_hermes([])
+        result = self.run_installer("-NoStatusline", "-NoAttribution",
+                                    setup=FAKE_HERMES + "; $env:PATH = ''", personalities=True)
+        self.assertIn("Python 3.9 or newer not found", result.stdout)
+        self.assertFalse((self.home / ".claude/agents").exists())
+        self.assertEqual(self.personalities(path), {})
 
     def test_stale_installed_file_is_refreshed_but_user_edit_needs_force(self):
         self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes")
         installed = self.home / ".claude/agents/reviewer.md"
-        source = REPO / "agents/reviewer.md"
+        source = REPO / "generated/claude/agents/reviewer.md"
         # What regeneration leaves behind: the old content this installer placed.
         # Write bytes, since text mode would add a carriage return on Windows.
         installed.write_bytes(b"older generation\n")

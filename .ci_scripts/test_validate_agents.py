@@ -198,7 +198,7 @@ class ValidateAgentsTest(unittest.TestCase):
     def test_index_must_link_every_agent(self) -> None:
         (self.agents / "sample-agent.md").write_text(VALID_AGENT, encoding="utf-8")
         report = validate_agents.Report()
-        validate_agents.validate_index(self.agents, ["sample-agent", "unlisted"], report)
+        validate_agents.validate_index(self.agents / "README.md", ["sample-agent", "unlisted"], report)
         self.assertEqual(len(report.errors), 1)
         self.assertIn("'unlisted' is not linked", report.errors[0])
 

@@ -275,9 +275,8 @@ def validate_agent(agent_file: Path, skills_root: Path, report: Report) -> str |
     return name or None
 
 
-def validate_index(agents_root: Path, names: list[str], report: Report) -> None:
+def validate_index(index: Path, names: list[str], report: Report) -> None:
     """Report an agent that the index README does not link."""
-    index = agents_root / INDEX_FILENAME
     if not index.is_file():
         report.error(str(index), "agent index is missing")
         return
@@ -307,6 +306,10 @@ def main(argv: list[str] | None = None) -> int:
         default="skills",
         help="directory holding one subdirectory per skill, for preload checks (default: skills)",
     )
+    parser.add_argument(
+        "--index",
+        help="agent index that must link every agent (default: README.md in the agents directory)",
+    )
     args = parser.parse_args(argv)
 
     agents_root = Path(args.agents_root)
@@ -322,7 +325,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: no agent files found under {agents_root}", file=sys.stderr)
         return 1
     names = [validate_agent(agent_file, skills_root, report) for agent_file in agent_files]
-    validate_index(agents_root, [name for name in names if name], report)
+    index = Path(args.index) if args.index else agents_root / INDEX_FILENAME
+    validate_index(index, [name for name in names if name], report)
 
     for warning in report.warnings:
         print(f"warning: {warning}")

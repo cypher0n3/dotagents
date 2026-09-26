@@ -7,11 +7,11 @@ It deliberately does not repeat the [README](./README.md); read that for what th
 
 ## Repository Boundaries
 
-This repository owns skill definitions, the agent roles that preload them and the native agents generated from those roles, the standards that govern both, and the tooling that generates, validates, and installs them.
+This repository owns skill definitions, the agents that preload them, written once in `agent_sources/` and generated for each tool, the standards that govern both, and the tooling that generates, validates, and installs them.
 
 It does not own agent tool configuration, machine setup, project-specific instructions, or prompts that only make sense inside one codebase.
 A skill that cannot be stated without naming a single private repository belongs in that repository instead, as a project-local skill.
-The same boundary applies to an agent: one that only makes sense inside one codebase belongs in that repository's `.claude/agents/`, where it overrides the portable agent of the same name.
+The same boundary applies to an agent: one that only makes sense inside one codebase belongs in that repository's own agent directory, such as `.claude/agents/`, where it overrides the portable agent of the same name.
 
 It also does not claim to be a neutral or authoritative standard.
 A skill here is a considered opinion of mine, and a repository's own conventions outrank it.

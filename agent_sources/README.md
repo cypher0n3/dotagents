@@ -1,32 +1,57 @@
-# Agent Sources
+# Agent Index
 
 ## Overview
 
-This directory holds the shared source for every agent role, which the generator in [`tools/agentgen/`](../tools/agentgen/README.md) renders into each tool's native format.
-Edit these files, never the generated ones, then run `just ci`, which regenerates everything before its other checks.
-[Shared Agent Templates](../docs/specs/shared-agent-templates.md) is the full specification.
+Each Markdown file here is the one source for one agent: its YAML front matter says everything about the agent, and its body is the agent's instructions.
+Edit an agent only here.
+`just ci` and `just install` generate every tool's version of it under `generated/`, which is not committed; see [Shared Agent Templates](../docs/specs/shared-agent-templates.md) for how each field maps to each tool.
+This index is maintained by hand.
+See [Agent Authoring Standards](../docs/docs_standards/agent_authoring.md) before adding or editing an agent.
 
-## Layout
+These agents are templates in the sense the rest of this repository uses the word: opinionated starting points to fork and adapt.
+Each one preloads the skills it needs from [`skills/`](../skills/README.md) rather than restating them, so the skill is the single place a rule is written.
+Where a role's rules depend on what it is handed, such as the language of a test or the type of a document, the agent preloads only what always applies and loads the rest on match.
+A project can override any agent by putting a file with the same name in its tool's project agent directory, such as `.claude/agents/`.
 
-- `roles/<name>.yaml` - one role: its name, description, body path, targets, model, skills, restrictions, presentation, and overrides.
-- `prompts/<name>.md` - the role's instructions, plain Markdown held to the [agent authoring standards](../docs/docs_standards/agent_authoring.md) and never rendered as a template.
-- `targets/<target>.yaml` - one tool's profile: its evidence, output directory, model aliases, and how it renders each field.
-- `templates/<target>.<extension>.j2` - the thin Jinja wrapper that places the rendered pieces for one tool.
+## Where Each Tool Gets Them
 
-## Outputs
+- Claude Code, Codex, and Cursor read the generated agents that `just install` links into `~/.claude/agents`, `~/.codex/agents`, and `~/.cursor/agents`, one file at a time.
+- Hermes gets each agent as a personality that `just install` sets in its configuration.
+- CAI reads this directory directly, so its personas need no generation or installation.
 
-- [`../agents/`](../agents/README.md) - Claude Code agents.
-- `../generated/codex/agents/` - Codex custom agents, as TOML.
-- `../generated/cursor/agents/` - Cursor agents.
-- `../generated/hermes/personalities/` - Hermes personalities, one JSON string per line.
-- `../generated/cai/personas/` - CAI personas.
-- `../generated/manifest.yaml` - what each output was generated from, and every decision the generator made for it.
+## Agents
 
-## Workflow
+- [`coder`](coder.md) - implements one scoped change end to end, with tests, and proves it against the repository's checks.
+  Tier `strong`; preloads `senior-developer`, `go-developer`, and `just-ci`; inherits every tool.
+- [`reviewer`](reviewer.md) - performs adversarial review of a change in any language without editing anything, and runs the repository's checks as part of the review.
+  Tier `strong`; preloads `senior-developer` and `code-review-precision`; read-only, with read tools plus the shell for lint and tests.
+- [`reviewer-go`](reviewer-go.md) - performs the same review for Go, against modern Go practice and its concurrency and security risks.
+  Tier `strong`; preloads `senior-go-dev-reviewer` and `code-review-precision`; the same read-only tools.
+  Both reviewers share the color `red`, because the color names the role and the suffix names the scope.
+- [`test-runner`](test-runner.md) - runs the tests, diagnoses each failure down to a root cause, and writes or repairs tests when the task calls for it.
+  Tier `standard`; preloads `senior-developer` and `just-ci`, and loads the language's test skill on match.
+- [`researcher`](researcher.md) - gathers facts from the repository and the web and reports them with exact references, without making changes.
+  Tier `standard`; no preloaded skills; read-only, with read tools plus web fetch and search.
+- [`planner`](planner.md) - turns a task into a detailed, test-gated execution plan as a Markdown checklist.
+  Tier `strong`; preloads `detailed-execution-planner`; read tools plus write access for the plan file.
+- [`spec-author`](spec-author.md) - writes and revises requirements and technical specifications to the repository's standards, then lints them.
+  Tier `standard`; preloads `spec-authoring`, `requirements-authoring`, and `markdown-writer`.
+- [`feature-author`](feature-author.md) - writes and revises Gherkin feature files that trace to requirements and specifications, then lints them.
+  Tier `standard`; preloads `feature-files-authoring` and `markdown-writer`.
+- [`docs-writer`](docs-writer.md) - writes, revises, and audits Markdown documentation against the repository's own conventions and leaves it lint clean.
+  Tier `standard`; preloads `markdown-writer`, and loads the skill for the document type, or `code-review-precision` for an audit, on match.
 
-1. Edit a role, its body, or a target profile.
-2. Run `just ci`, or `just generate-agents` for generation alone.
-3. Review and commit the regenerated files together with the source change.
+## Model Selection
 
-A generated file edited by hand stops generation with an error naming it.
-Move the change into the source and restore the file, or run `just generate-agents-accept-source` to discard the edit, which is also how a merge conflict in generated files is resolved.
+Each agent names a tier rather than a model, and the generator maps the tier to each tool's model, so an agent tracks the current release of its tier without an edit here.
+For Claude Code, `frontier` maps to `fable`, `strong` to `opus`, `standard` to `sonnet`, and `fast` to `haiku`; a tool with no mapping for a tier uses its session's model.
+
+- `strong` goes to the roles where judgment is the product: implementing against a specification, either kind of adversarial review, and planning.
+  A missed defect or a wrong plan costs more than the difference in price.
+- `standard` goes to the roles that are bounded by written conventions and a lint gate: research, test running, and the three authoring roles.
+  Those agents follow rules the skills state and the repository's checks enforce, so the mid tier is enough and runs faster.
+  Test running sits here rather than with `strong` because a test either passed or it did not, and the agent is told to report the real output rather than judge it.
+- `frontier` is not used by default; reserve it for a role whose mistakes are costlier than any of these.
+- `fast` is not used by default, because none of these roles is a pure lookup, but it is the right choice for a narrow agent you add that only searches or reformats.
+
+Set a tool's own model inside an agent's `model` block when one agent needs something other than its tier, or override a model on the command line or in a project-level copy of the agent when a task warrants it.

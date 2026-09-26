@@ -7,6 +7,6 @@ Drafts do not change current installer behavior, generated artifacts, or the [ag
 
 ## Proposals
 
-- [Agent Source Rework](agent-source-rework.md) - the working record of decisions for consolidating each agent's source into one place.
+- [CAI Native Agent Sources](cai-native-agent-sources.md) - what CAI needs to read the agents in `agent_sources/` directly, to carry to the CAI repository.
 
 An implemented draft moves to [Specifications](../specs/README.md), as [Shared Agent Templates](../specs/shared-agent-templates.md) did.

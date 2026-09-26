@@ -24,6 +24,11 @@
         no elevation. When the clone and the home directory are on different
         volumes (a hard link is impossible there) the file is copied instead.
 
+    Single files use a symbolic link, as the Unix installer does, whenever
+    Windows allows one (Developer Mode or an elevated shell); the installer
+    tests this once and reports which link type it used. Otherwise they fall
+    back to a hard link, then a copy, as described above.
+
     Copies can drift, and so can hard links: regenerating agents, or a git
     checkout that updates a file, replaces the file in this clone rather than
     editing it, which leaves the installed link holding the old content. The
@@ -32,14 +37,16 @@
     still what this installer last placed there, as recorded in
     install-state.json under %LOCALAPPDATA%\dotagents, and is otherwise
     replaced only when -Force is given. Pass -Copy to force the copy strategy
-    for files even when a hard link would work.
+    for files even when a link would work.
 
-    The agents generated from agent_sources/ are installed the same way as the
-    Claude agents: one file per generated agent in ~/.codex/agents and
-    ~/.cursor/agents. CAI personas are installed only by scripts/install.sh,
-    because CAI's layout is Linux/XDG. Each generated Hermes personality is set
-    in Hermes config through its CLI; one this installer did not set, or one
-    changed since, is replaced only with -Force.
+    Before any agent step, the installer runs .ci_scripts/generate_agents.py,
+    the same Python code `just ci` runs, to build generated/ from
+    agent_sources/. Without Python it skips only the agent steps. The generated
+    Claude Code, Codex, and Cursor agents are installed one file at a time into
+    ~/.claude/agents, ~/.codex/agents, and ~/.cursor/agents. Each generated
+    Hermes personality is set in Hermes config through its CLI; one this
+    installer did not set, or one changed since, is replaced only with -Force.
+    CAI reads agent_sources/ itself, so nothing is installed for it.
 
     An existing real file or directory that this repository did not create is
     never overwritten unless -Force is given.
@@ -74,9 +81,6 @@
 .PARAMETER NoHermesPersonalities
     Skip setting the generated Hermes personalities.
 
-.PARAMETER NoCaiPersonas
-    Skip the CAI personas step, which this installer reports as unsupported.
-
 .EXAMPLE
     .\scripts\install.ps1 -DryRun
 
@@ -94,8 +98,7 @@ param(
     [switch]$NoHermes,
     [switch]$NoCodexAgents,
     [switch]$NoCursorAgents,
-    [switch]$NoHermesPersonalities,
-    [switch]$NoCaiPersonas
+    [switch]$NoHermesPersonalities
 )
 
 Set-StrictMode -Version Latest
@@ -260,8 +263,38 @@ function Set-InstallStateEntry {
     $script:installStateChanged = $true
 }
 
+# Whether this session can create symbolic links, which on Windows needs
+# Developer Mode or an elevated shell. Tested once, in a temporary directory.
+function Test-SymlinkSupport {
+    if ($null -ne $script:canSymlink) { return $script:canSymlink }
+    $probe = Join-Path ([IO.Path]::GetTempPath()) ("dotagents-symlink-" + [guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path $probe | Out-Null
+        $target = Join-Path $probe 'target'
+        [IO.File]::WriteAllText($target, 'probe')
+        New-Item -ItemType SymbolicLink -Path (Join-Path $probe 'link') -Target $target -ErrorAction Stop | Out-Null
+        $script:canSymlink = $true
+    } catch {
+        $script:canSymlink = $false
+    } finally {
+        Remove-Item -LiteralPath $probe -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    return $script:canSymlink
+}
+
+# Whether a path lies inside this repository, so a link to it is ours.
+function Test-InRepo {
+    param([string]$Path)
+    if ([string]::IsNullOrEmpty($Path)) { return $false }
+    $full = [IO.Path]::GetFullPath($Path, $repoRoot)
+    $root = [IO.Path]::GetFullPath($repoRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    return $full.StartsWith($root, $comparison)
+}
+
 # Install-FileLink <source-file> <link-path>
-# Hard-link link-path to source-file on the same volume, else copy it.
+# Symbolic-link link-path to source-file when this session can, as the Unix
+# installer does; otherwise hard-link it on the same volume, else copy it.
 function Install-FileLink {
     param(
         [Parameter(Mandatory)][string]$Source,
@@ -271,33 +304,48 @@ function Install-FileLink {
     $link = Expand-Home $Link
     $stateKey = [System.IO.Path]::GetFullPath($link)
     $sourceSha = Get-Sha $source
-
+    $useSymlink = (-not $Copy) -and (Test-SymlinkSupport)
     $sameVolume = (Get-Root $source) -ieq (Get-Root $stateKey)
     $useCopy = $Copy -or (-not $sameVolume)
 
-    if (Test-Path -LiteralPath $link) {
-        $item = Get-Item -LiteralPath $link -Force
+    # Get-Item also finds a symbolic link whose target is gone, which Test-Path does not.
+    $item = Get-Item -LiteralPath $link -Force -ErrorAction SilentlyContinue
+    if ($null -ne $item) {
         if ($item.PSIsContainer) {
             Write-Detail "skip: $link exists and is a directory"
             return
         }
-        # A hard link to the same file, or a copy that still matches, shares the
-        # source hash. Either way there is nothing to do.
-        $linkSha = Get-Sha $link
-        if ($linkSha -ieq $sourceSha) {
-            Write-Detail "ok: $link (up to date)"
-            if (-not $DryRun) { Set-InstallStateEntry 'file_links' $stateKey $sourceSha.ToLowerInvariant() }
-            return
-        }
-        # Unchanged since this installer placed it, so only the source moved on,
-        # as regenerating agents or a git checkout does.
+        $existing = if ($item.LinkType -eq 'SymbolicLink') { Get-LinkTarget $item } else { $null }
         $recorded = (Get-InstallState)['file_links'][$stateKey]
-        $stale = $recorded -and ($recorded -ieq $linkSha)
-        if ($stale) {
-            Write-Detail "refresh: $link (unchanged since this installer placed it; the source changed)"
-        } elseif (-not $Force) {
-            Write-Detail "skip: $link differs from source (use -Force to replace)"
-            return
+        if ($existing) {
+            if ([IO.Path]::GetFullPath($existing, (Split-Path -Parent $stateKey)) -ieq $source) {
+                Write-Detail "ok: $link (already linked)"
+                return
+            }
+            if (Test-InRepo $existing) {
+                Write-Detail "relink: $link pointed at $existing in this repository"
+            } elseif (-not $Force) {
+                Write-Detail "skip: $link points at $existing (use -Force to replace)"
+                return
+            }
+        } else {
+            # A hard link to the same file, or a copy that still matches, shares the
+            # source hash.
+            $linkSha = Get-Sha $link
+            $ours = $recorded -and ($recorded -ieq $linkSha)
+            if ($linkSha -ieq $sourceSha -and -not ($useSymlink -and $ours)) {
+                Write-Detail "ok: $link (up to date)"
+                if (-not $DryRun) { Set-InstallStateEntry 'file_links' $stateKey $sourceSha.ToLowerInvariant() }
+                return
+            }
+            # Unchanged since this installer placed it, so only the source moved on,
+            # as regenerating agents or a git checkout does.
+            if ($ours) {
+                Write-Detail "refresh: $link (unchanged since this installer placed it)"
+            } elseif (-not $Force) {
+                Write-Detail "skip: $link differs from source (use -Force to replace)"
+                return
+            }
         }
         if ($DryRun) {
             Write-Detail "would remove file: $link"
@@ -307,6 +355,16 @@ function Install-FileLink {
     }
 
     Ensure-Parent $link
+    if ($useSymlink) {
+        if ($DryRun) {
+            Write-Detail "would symlink: $link -> $source"
+        } else {
+            New-Item -ItemType SymbolicLink -Path $link -Target $source | Out-Null
+            Write-Detail "symlink: $link -> $source"
+            Set-InstallStateEntry 'file_links' $stateKey $sourceSha.ToLowerInvariant()
+        }
+        return
+    }
     if ($useCopy) {
         if ($DryRun) {
             $why = if ($Copy) { '-Copy' } else { 'different volume' }
@@ -381,6 +439,8 @@ function Prepare-RealDir {
         if ($existing) {
             if ($existing -ieq (Resolve-Full $SourceDir)) {
                 Write-Detail "migrate: $target links the whole $(Split-Path -Leaf $SourceDir) directory; replacing it with a real directory"
+            } elseif (Test-InRepo $existing) {
+                Write-Detail "migrate: $target links $existing in this repository; replacing it with a real directory"
             } elseif ($Force) {
                 Write-Detail "migrate: $target points at $existing; replacing it with a real directory"
             } else {
@@ -642,6 +702,7 @@ function Read-PersonalityFile {
     param([Parameter(Mandatory)][string]$Path)
     $value = [ordered]@{}
     foreach ($line in [IO.File]::ReadAllLines($Path)) {
+        if ($line.StartsWith('#')) { continue }
         $index = $line.IndexOf(': ')
         $key = if ($index -gt 0) { $line.Substring(0, $index) } else { '' }
         if ($key -notin 'description', 'system_prompt' -or $value.Contains($key)) {
@@ -759,9 +820,11 @@ function Install-HermesPersonalities {
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $skillsDir = Join-Path $repoRoot 'skills'
-$agentsDir = Join-Path $repoRoot 'agents'
 $agentsFile = Join-Path $repoRoot 'AGENTS.md'
 $generatedDir = Join-Path $repoRoot 'generated'
+$agentsDir = Join-Path $generatedDir 'claude/agents'
+$agentSourcesDir = Join-Path $repoRoot 'agent_sources'
+$generator = Join-Path $repoRoot '.ci_scripts/generate_agents.py'
 $hermesPersonalitiesDir = Join-Path $generatedDir 'hermes/personalities'
 $claudeStatuslineSource = Join-Path $repoRoot 'claude\statusline-command.ps1'
 $cursorStatuslineSource = Join-Path $repoRoot 'cursor\statusline-command.ps1'
@@ -794,11 +857,6 @@ $perSkillTargets = @(
     '~/.grok/skills'
 )
 
-# Per-agent targets: one file link per agent under agents/.
-$perAgentTargets = @(
-    '~/.claude/agents'
-)
-
 # Instruction-file targets: one file link to AGENTS.md each.
 $instructionTargets = @(
     '~/.claude/AGENTS.md'
@@ -812,6 +870,7 @@ $instructionTargets = @(
 
 $script:installState = $null
 $script:installStateChanged = $false
+$script:canSymlink = $null
 
 Write-Host "Source: $skillsDir"
 if ($DryRun) { Write-Host '(dry run: nothing will be changed)' }
@@ -837,24 +896,47 @@ Get-ChildItem -LiteralPath $skillsDir -Directory |
     Where-Object { -not (Test-Path -LiteralPath (Join-Path $_.FullName 'SKILL.md') -PathType Leaf) } |
     ForEach-Object { Write-Detail "note: non-skill directory left in place: $($_.Name)" }
 
-Write-Step 'Claude agents:'
-$agentFiles = Get-ChildItem -LiteralPath $agentsDir -Filter '*.md' |
-    Where-Object { $_.Name -ne 'README.md' }
-foreach ($target in $perAgentTargets) {
-    $state = Prepare-RealDir $target $agentsDir
-    if ($state -eq 'skip') { continue }
-    if ($state -eq 'dry-migrate') {
-        Write-Detail "would link each agent into $target"
-        continue
+# Generate the agents with the same Python code `just ci` runs. generated/
+# lives in this clone and is not installed anywhere by itself, so a dry run
+# generates too.
+Write-Step 'Agent generation:'
+$agentsAvailable = $false
+$agentsSkip = $null
+$python = $null
+foreach ($candidate in @(
+        @{ Name = 'py'; Args = @('-3') }
+        @{ Name = 'python3'; Args = @() }
+        @{ Name = 'python'; Args = @() })) {
+    if (Get-Command $candidate.Name -CommandType Application -ErrorAction SilentlyContinue) {
+        # The Windows Store placeholder for python exits non-zero without running anything.
+        $global:LASTEXITCODE = 0
+        & $candidate.Name @($candidate.Args) -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>$null
+        if ($LASTEXITCODE -eq 0) { $python = $candidate; break }
     }
-    foreach ($agent in $agentFiles) {
-        Install-FileLink $agent.FullName "$target/$($agent.Name)"
+}
+if (-not (Test-Path -LiteralPath $agentSourcesDir) -or -not (Test-Path -LiteralPath $generator)) {
+    $agentsSkip = "no agent sources in $agentSourcesDir"
+} elseif ($null -eq $python) {
+    $agentsSkip = 'Python 3.9 or newer not found; install it (https://www.python.org/downloads/) to install the agents'
+} else {
+    $global:LASTEXITCODE = 0
+    $output = & $python.Name @($python.Args) $generator --root $repoRoot 2>&1
+    foreach ($line in @($output)) { Write-Detail "$line" }
+    if ($LASTEXITCODE -ne 0) { throw "Agent generation failed; fix the agent sources and rerun" }
+    $agentsAvailable = $true
+}
+if ($agentsSkip) { Write-Detail "skip: $agentsSkip" }
+if ($agentsAvailable -and -not $Copy) {
+    $how = if (Test-SymlinkSupport) { 'symbolic links' } else {
+        'hard links or copies (symbolic links need Developer Mode or an elevated shell)'
     }
-    Report-ExtraAgents $agentsDir $target
+    Write-Detail "agent files are installed as $how"
 }
 
-# Generated agents for other tools, one file each, like the Claude agents.
+# Generated agents, one file each, into a real directory each tool owns.
 $generatedTargets = @(
+    @{ Label = 'Claude agents'; Switch = $null; Skip = $false
+       Source = $agentsDir; Target = '~/.claude/agents'; Filter = '*.md' }
     @{ Label = 'Codex agents'; Switch = 'NoCodexAgents'; Skip = $NoCodexAgents
        Source = (Join-Path $generatedDir 'codex/agents'); Target = '~/.codex/agents'; Filter = '*.toml' }
     @{ Label = 'Cursor agents'; Switch = 'NoCursorAgents'; Skip = $NoCursorAgents
@@ -866,11 +948,16 @@ foreach ($generated in $generatedTargets) {
         Write-Detail "skipped (-$($generated.Switch))."
         continue
     }
+    if (-not $agentsAvailable) {
+        Write-Detail "skip: $agentsSkip"
+        continue
+    }
     $files = @(if (Test-Path -LiteralPath $generated.Source) {
         Get-ChildItem -LiteralPath $generated.Source -Filter $generated.Filter | Sort-Object Name
     })
     if ($files.Count -eq 0) {
         Write-Detail "skip: no generated files in $($generated.Source)"
+        if (Test-Path -LiteralPath $generated.Source) { Report-ExtraAgents $generated.Source $generated.Target $generated.Filter }
         continue
     }
     $state = Prepare-RealDir $generated.Target $generated.Source
@@ -883,13 +970,6 @@ foreach ($generated in $generatedTargets) {
         Install-FileLink $file.FullName "$($generated.Target)/$($file.Name)"
     }
     Report-ExtraAgents $generated.Source $generated.Target $generated.Filter
-}
-
-Write-Step 'CAI personas:'
-if ($NoCaiPersonas) {
-    Write-Detail 'skipped (-NoCaiPersonas).'
-} else {
-    Write-Detail 'skip: CAI personas follow the Linux/XDG layout; install them with scripts/install.sh'
 }
 
 Write-Step 'Global instruction file:'
@@ -965,6 +1045,9 @@ if ($NoHermes) {
     Install-HermesSkills
     if ($NoHermesPersonalities) {
         Write-Step 'Hermes personalities: skipped (-NoHermesPersonalities).'
+    } elseif (-not $agentsAvailable) {
+        Write-Step 'Hermes personalities:'
+        Write-Detail "skip: $agentsSkip"
     } else {
         Write-Step 'Hermes personalities:'
         Install-HermesPersonalities
