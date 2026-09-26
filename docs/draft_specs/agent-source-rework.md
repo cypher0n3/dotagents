@@ -102,9 +102,20 @@ The generator code lives separately in `tools/agentgen/`.
    - There is no generation manifest, no hand-edit protection, no accept-source recipe, and no check-only mode, because nothing generated is ever committed or reviewed as a file.
    - Hosted CI generates the outputs before any check that reads them, such as agent validation.
    - Each generated file still opens with a comment naming its source and saying not to edit it, where the format allows one, because a hand edit is lost at the next generation.
-   - The Claude Code agents under `agents/` stop being committed, which revises decision 2's output location; see the open questions.
+   - The Claude Code agents under `agents/` stop being committed, which revises decision 2's output location as decision 10 records.
+
+10. Every generated file lives under one Git-ignored `generated/` folder, which revises decision 2's output location:
+    - Claude Code: `generated/claude/agents/<name>.md`.
+    - Codex: `generated/codex/agents/<name>.toml`.
+    - Cursor: `generated/cursor/agents/<name>.md`.
+    - Hermes: `generated/hermes/personalities/<name>.yaml`.
+    - CAI: `generated/cai/personas/<name>.md`.
+
+    The `agents/` folder is removed.
+    The hand-maintained agent index moves from `agents/README.md` to `agent_sources/README.md`, beside the sources it describes.
+    The generator owns `generated/` outright and clears and rebuilds it on every run, so a removed agent never leaves a stale output behind.
+    The installers and `validate_agents.py` read the Claude Code agents from `generated/claude/agents/`.
 
 ## Open Questions
 
-- Where generated outputs live now that none are committed, including the Claude Code agents and the hand-maintained agent index `agents/README.md`.
 - How the Windows installer runs the generator, since it needs the same Python code and today requires only PowerShell.
