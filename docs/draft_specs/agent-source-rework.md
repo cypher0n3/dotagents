@@ -188,8 +188,10 @@ The generator code lives separately in `tools/agentgen/`.
     - CAI maps the dotagents format itself: `model.cai` becomes `models.default` for a single identifier or `models.preferred` for a list, `skills` becomes `required_skills`, `suggested_skills` is used as is, `exclude: [cai]` hides the agent, and keys for other tools are ignored.
     - An optional `cai:` block in a source file carries CAI-only settings: `selection`, `max_steps`, `max_turns`, `ingest_personas`, and `mcp_servers`.
       The dotagents generator validates that block, so a typo fails `just ci`, but renders nothing from it.
-    - CAI never writes into `~/.agents/agent_sources/`: no legacy-key rewrite, and no `/models` write.
-    - `/models` persistence for a persona from that layer writes a models-only overlay in CAI's own global persona directory, which CAI merges over the dotagents persona instead of replacing it.
+    - CAI never rewrites legacy keys in `~/.agents/agent_sources/`.
+    - The one write CAI makes there is persisting a model with `/model`: it places the selected identifier at the top of that agent's `model.cai` list, moving it up if it is already listed and converting a single identifier to a list.
+      It changes nothing else in the file, leaving other keys, comments, and the body byte-identical, so the change shows up as an ordinary diff in the dotagents clone.
+    - The dotagents generator therefore accepts `model.cai` as a single identifier or a list, and its frontmatter subset accepts both the inline and block list forms CAI may write.
     - Each source file carries `schema: 1`, so CAI can refuse a format version it does not understand.
     - Until CAI ships this reader, CAI does not see these agents, and its built-in personas are unaffected.
     - The CAI-side change is described in a requirements note under `docs/draft_specs/` for the owner to carry to CAI, since this session cannot push to GitLab.
