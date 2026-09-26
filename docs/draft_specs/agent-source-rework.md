@@ -135,6 +135,11 @@ The generator code lives separately in `tools/agentgen/`.
     Without the folder it reports that it was not found, as the Unix installer does.
     This does not claim that CAI supports Windows; the installer only acts where a CAI configuration already exists.
 
+14. The Windows installer uses a symbolic link for each generated file when Windows allows one, and otherwise falls back to a hard link on the same drive, then a copy.
+    It tests once per run whether it can create a symbolic link, which works with Developer Mode or an elevated shell, and reports which link type it used.
+    With symbolic links, Windows behaves exactly like Unix, and installed agents always show the latest generation.
+    With hard links or copies, it behaves as the pull request built it, including refreshing files it placed that went stale, so no administrator rights or Developer Mode are ever required.
+
 ## Open Questions
 
-- Which kind of link the Windows installer uses for generated files.
+- Whether generated Markdown is linted, given that it is not committed and the hosted Markdown lint job has no Python to generate it.
