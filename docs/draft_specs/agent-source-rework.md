@@ -92,6 +92,11 @@ The generator code lives separately in `tools/agentgen/`.
 
    The reworded lines change the Claude Code agents too, so those agents are no longer byte-identical to the current hand-authored files, and each change is listed in the pull request.
 
+8. The generator is a standard-library-only Python script, `.ci_scripts/generate_agents.py`, with an offline unit test beside it in `.ci_scripts/test_generate_agents.py`.
+   It parses a documented subset of YAML frontmatter itself: flat keys, lists, the `model` block, and one block per tool.
+   Anything outside that subset, such as anchors, fails generation with a clear error.
+   `tools/agentgen/`, `uv`, its lock file, and the `uv` install in both CI definitions are removed, so `just ci` again needs only `just`, `python3`, and `markdownlint-cli2`.
+
 ## Open Questions
 
-- What the generator is built with, and whether `just ci` still needs `uv`.
+- How generated files are protected from hand edits, and whether the generation manifest stays.
