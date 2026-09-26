@@ -97,6 +97,14 @@ The generator code lives separately in `tools/agentgen/`.
    Anything outside that subset, such as anchors, fails generation with a clear error.
    `tools/agentgen/`, `uv`, its lock file, and the `uv` install in both CI definitions are removed, so `just ci` again needs only `just`, `python3`, and `markdownlint-cli2`.
 
+9. Generated files are not committed.
+   `just ci` and `just install` both generate them with the same generator code, and the output paths are ignored by Git.
+   - There is no generation manifest, no hand-edit protection, no accept-source recipe, and no check-only mode, because nothing generated is ever committed or reviewed as a file.
+   - Hosted CI generates the outputs before any check that reads them, such as agent validation.
+   - Each generated file still opens with a comment naming its source and saying not to edit it, where the format allows one, because a hand edit is lost at the next generation.
+   - The Claude Code agents under `agents/` stop being committed, which revises decision 2's output location; see the open questions.
+
 ## Open Questions
 
-- How generated files are protected from hand edits, and whether the generation manifest stays.
+- Where generated outputs live now that none are committed, including the Claude Code agents and the hand-maintained agent index `agents/README.md`.
+- How the Windows installer runs the generator, since it needs the same Python code and today requires only PowerShell.
