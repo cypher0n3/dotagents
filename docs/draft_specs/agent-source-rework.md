@@ -83,6 +83,15 @@ The generator code lives separately in `tools/agentgen/`.
    An agent opts out of specific tools with an optional `exclude` list, such as `exclude: [hermes]`.
    Adding a new tool to the generator therefore needs no change to any agent file.
 
+7. There is no Jinja anywhere: no templates in `agent_sources/`, and none in the generator.
+   Each agent is one plain `agent_sources/<name>.md` file whose body is ordinary Markdown, linted like every other Markdown file, and the generator code writes every output directly.
+   A review of the nine bodies found little that templating would serve.
+   - Shared boilerplate is weak: all nine read the repository's `meta.md`, `AGENTS.md`, and `AGENTS.override.md`, but each ends that sentence differently for its role, and only one sentence is identical across three agents.
+   - Eight lines across six agents are phrased for Claude Code: "you have no edit tools" in reviewer, reviewer-go, and researcher, and "the preloaded ... skill" in reviewer, reviewer-go, planner, and docs-writer.
+     They are reworded once to be true for every tool, such as "Do not modify the workspace, and do not use the shell to work around that."
+
+   The reworded lines change the Claude Code agents too, so those agents are no longer byte-identical to the current hand-authored files, and each change is listed in the pull request.
+
 ## Open Questions
 
-- Whether output files are written by Jinja templates or directly by generator code.
+- What the generator is built with, and whether `just ci` still needs `uv`.
