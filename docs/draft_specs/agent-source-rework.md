@@ -145,6 +145,10 @@ The generator code lives separately in `tools/agentgen/`.
     The agent bodies are linted as sources in `agent_sources/<name>.md`, and the hosted Markdown lint job is unchanged.
     The generator's unit tests render the text it adds to a body, the `## Skill Dependencies` section for Codex and Cursor, and check it against the Markdown rules a test can apply.
 
+16. The rework lands on the same pull request, [cypher0n3/dotagents#2](https://github.com/cypher0n3/dotagents/pull/2), as ordinary commits on top of its branch, and its description is rewritten to match.
+    The pull request is squashed when it merges, so the rejected approach does not reach `main`.
+    [Shared Agent Templates](../specs/shared-agent-templates.md) is rewritten to match these decisions, and this record is folded into it and removed.
+
 ## Open Questions
 
-- How the rework lands: on the same pull request, or on a new one.
+None; every question raised so far is decided above.
