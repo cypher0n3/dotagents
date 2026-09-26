@@ -26,6 +26,11 @@ The generator code lives separately in `tools/agentgen/`.
    How each tool spells each field is built into the generator code, which is not edited to change an agent.
    The separate `roles/`, `prompts/`, and per-tool profile files are removed.
 
+2. The per-agent source files live in a new folder, `agent_sources/<name>.md`, one Markdown file per agent.
+   The generator writes the Claude Code agent to `agents/<name>.md`, and the Codex, Cursor, Hermes, and CAI outputs under `generated/`.
+   `just install`, `validate_agents.py`, and the hand-maintained agent index `agents/README.md` keep using `agents/` unchanged.
+   The Claude Code agent is generated output, never the source.
+
 ## Open Questions
 
-- Where the per-agent source files live, and whether the Claude Code file is generated or is the source itself.
+- How an agent's model is written in its source file for each tool.
