@@ -2,9 +2,13 @@
 
 ## Overview
 
-This document defines what a Claude Code subagent in this repository must contain, how it is named, how its model and tools are chosen, and how it is validated.
+This document defines what an agent in this repository must contain, how it is named, how its model and tools are chosen, and how it is validated.
 It follows the [Claude Code subagent documentation](https://code.claude.com/docs/en/sub-agents) and adds this repository's own conventions on top of it.
 Every rule here is enforced by `just ci` unless the text says otherwise.
+
+Each agent is written once, in [`agent_sources/`](../../agent_sources/README.md), and generated for Claude Code, Codex, Cursor, and Hermes; CAI reads the source directly.
+The rules below are stated for the source file and for the Claude Code agent generated from it, which `just validate-agents` checks.
+[Shared Agent Templates](../specs/shared-agent-templates.md) specifies every source key and how it maps to each tool.
 
 An agent is a role with a system prompt, a model, a tool allowance, and a set of preloaded skills.
 A skill is a rule set that any agent tool can load.
@@ -12,11 +16,13 @@ Keep that division: an agent says who is acting and with what, and the skills it
 
 ## Directory Layout
 
-Each agent is one file, `agents/<agent-name>.md`, and the filename without its extension is the agent's address.
-Claude Code addresses the agent by that name, so renaming the file is a breaking change for anyone who has typed it into a workflow or a project-level override.
+Each agent is one source file, `agent_sources/<agent-name>.md`, and the filename without its extension is the agent's address in every tool.
+Every tool addresses the agent by that name, so renaming the file is a breaking change for anyone who has typed it into a workflow or a project-level override.
 
-- [`agents/README.md`](../../agents/README.md) is the index and must link every agent; `just validate-agents` fails when one is missing.
-- `just install` links each file into `~/.claude/agents` one at a time, so a new file needs no installer change and any agent already in that directory is left alone.
+- Edit an agent only in its source file.
+  `just ci` and `just install` generate `generated/claude/agents/<agent-name>.md` and each other tool's version from it; `generated/` is never committed, and a hand edit there is lost at the next generation.
+- [`agent_sources/README.md`](../../agent_sources/README.md) is the index and must link every agent; `just validate-agents` fails when one is missing.
+- `just install` links each generated file into `~/.claude/agents` one at a time, so a new agent needs no installer change and any agent already in that directory is left alone.
   An agent whose filename matches one already sitting there is reported as skipped rather than replaced, because the local file is the one Claude Code will use.
   Linking file by file cannot clean up after itself, so `just install` also reports anything else it finds in that directory, including the link a renamed agent leaves dangling, and removes none of it; a leftover and an agent you added on purpose look the same from the installer.
 - A project overrides an agent by placing a file with the same name under its own `.claude/agents/`, which is where a version that names one codebase's recipes and identifiers belongs.
@@ -25,12 +31,14 @@ Agent names use lowercase kebab-case and read as a role: `reviewer`, `spec-autho
 
 ## Frontmatter Contract
 
-Every agent file opens with YAML frontmatter delimited by `---` lines.
+Every source file opens with YAML frontmatter delimited by `---` lines, and starts with `schema: 1`.
+The generated Claude Code agent carries the fields below; the source sets them directly, except that `model` comes from the source's tier or its `model.claude` value, and `permissionMode`, `maxTurns`, `background`, `isolation`, and `memory` go in the source's `claude:` block.
+Fields the generator does not render, such as `hooks`, cannot be set until the generator supports them, and the source's own keys for other tools are described in [Shared Agent Templates](../specs/shared-agent-templates.md#keys).
 
 - `name` is required and must exactly match the filename without its extension.
 - `description` is required and is the routing text Claude Code uses to decide when to delegate to the agent.
 - `model` is required by this repository, though Claude Code treats it as optional, and must be `sonnet`, `opus`, `haiku`, `fable`, `inherit`, or a full `claude-*` model identifier.
-  Prefer an alias so the agent tracks the current release of its tier.
+  Set a tier in the source rather than a model, so the agent tracks the current release of its tier; with no tier or Claude value, the generated agent gets `inherit`.
 - `tools` is a comma-separated allowlist of tool names, and `disallowedTools` a denylist that Claude Code ignores when `tools` is set; omit both to inherit every tool.
 - `skills` is a YAML list of skill names, each of which must exist as `skills/<name>/SKILL.md`.
   Claude Code preloads the full text of each named skill into the agent's context at start, so every entry is paid for on every run.
@@ -65,11 +73,12 @@ The description is read by the model, not by a person scanning a list, so it is 
 
 Choose the model by what a mistake costs, not by what the agent is called.
 
-- `opus` for roles where judgment is the product and a miss is expensive: implementation against a specification, adversarial review, and planning.
-- `sonnet` for roles bounded by written conventions and a lint gate that catches drift: research, test running, and the authoring roles.
-- `haiku` for a narrow agent that only searches or reformats and whose output is checked by something else.
+- `strong`, which is `opus` for Claude Code, for roles where judgment is the product and a miss is expensive: implementation against a specification, adversarial review, and planning.
+- `standard`, which is `sonnet`, for roles bounded by written conventions and a lint gate that catches drift: research, test running, and the authoring roles.
+- `fast`, which is `haiku`, for a narrow agent that only searches or reformats and whose output is checked by something else.
+- `frontier`, which is `fable`, only for a role whose mistakes cost more than any of these.
 
-Record the choice and its reason in [`agents/README.md`](../../agents/README.md), so a reader can disagree with the reasoning rather than guess at it.
+Name a tool's own model inside the source's `model` block only when one agent needs something its tier does not give, and record the choice and its reason in [`agent_sources/README.md`](../../agent_sources/README.md), so a reader can disagree with the reasoning rather than guess at it.
 
 ## Choosing the Tools
 
@@ -89,6 +98,7 @@ The body is the agent's system prompt and is held to the repository's documentat
 - Write imperative instructions aimed at the agent, and state prohibitions explicitly, because an agent follows a stated prohibition far more reliably than an implied one.
 - Tell the agent to read the repository's `meta.md`, `AGENTS.md`, and `AGENTS.override.md` first and to follow them over the prompt, so the portable agent defers to the codebase it is running in.
 - Do not restate a rule that lives in a preloaded skill; if the rule is missing from the skill, add it there so every tool that reads the skill sees it.
+- Write every instruction so it is true for every tool the agent is generated for: say "do not modify the workspace" rather than "you have no edit tools", and "the skill loaded for this role" rather than "the preloaded skill", because only some tools enforce tool lists or preload skills.
 - Keep the body under about eighty lines; an agent that needs more is carrying content that belongs in a skill.
 
 An agent file carries no HTML comments and no per-file license line, for the same reasons a skill file carries none: the file is loaded as raw text, and licensing is stated in [LICENSE](../../LICENSE).
@@ -106,6 +116,7 @@ An agent here must work in any repository it is started in.
 
 Run the full local gate before committing an agent change.
 
-- `just validate-agents` checks frontmatter, naming, model, color, effort and tool values, preloaded skills, the body opening, comments, and the index.
-- `just lint-md agents/<agent-name>.md` applies Markdown fixes and reports what it cannot fix.
-- `just ci` runs every check that CI runs.
+- `just generate-agents` validates every source file and generates every tool's agents from them.
+- `just validate-agents` generates, then checks the Claude Code agents' frontmatter, naming, model, color, effort and tool values, preloaded skills, the body opening, comments, and the index.
+- `just lint-md agent_sources/<agent-name>.md` applies Markdown fixes to the source and reports what it cannot fix.
+- `just ci` runs every check that CI runs, starting with generation.

@@ -45,6 +45,26 @@ function hermes {
         [IO.File]::WriteAllText($config, (ConvertTo-Json -InputObject $data -Depth 100))
         return
     }
+    if ($args.Count -eq 4 -and $args[0] -eq 'config' -and $args[1] -eq 'get' -and
+        $args[2] -like 'agent.personalities*' -and $args[3] -eq '--json') {
+        $data = Get-Content -LiteralPath $config -Raw | ConvertFrom-Json -AsHashtable
+        $all = if ($data.Contains('agent')) { $data.agent.personalities } else { $null }
+        if ($args[2] -eq 'agent.personalities') { return ConvertTo-Json -InputObject $all -Depth 100 -Compress }
+        $name = $args[2].Substring('agent.personalities.'.Length)
+        $one = if ($null -ne $all -and $all.Contains($name)) { $all[$name] } else { $null }
+        return ConvertTo-Json -InputObject $one -Depth 100 -Compress
+    }
+    if ($args.Count -eq 4 -and $args[0] -eq 'config' -and $args[1] -eq 'set' -and
+        $args[2] -like 'agent.personalities.*') {
+        if ($env:FAKE_HERMES_MODE -eq 'no-write') { return }
+        $data = Get-Content -LiteralPath $config -Raw | ConvertFrom-Json -AsHashtable
+        if (-not $data.Contains('agent')) { $data.agent = @{} }
+        if (-not $data.agent.Contains('personalities')) { $data.agent.personalities = @{} }
+        $data.agent.personalities[$args[2].Substring('agent.personalities.'.Length)] =
+            ConvertFrom-Json -InputObject $args[3] -AsHashtable
+        [IO.File]::WriteAllText($config, (ConvertTo-Json -InputObject $data -Depth 100))
+        return
+    }
     throw "Unexpected Hermes invocation: $args"
 }
 '''
@@ -69,11 +89,16 @@ class PowerShellInstallerTests(unittest.TestCase):
                       self.home / ".cursor/cli-config.json",
                       self.home / ".codex/config.toml"]
 
-    def run_installer(self, *flags, setup="", check=True, extra_env=None):
+    def run_installer(self, *flags, setup="", check=True, extra_env=None, personalities=False, copy=True):
         assert PWSH is not None
+        # Settings and skill-registration tests leave personalities to their own tests.
+        if not personalities:
+            flags = ("-NoHermesPersonalities", *flags)
         env = os.environ.copy()
-        for key in ("CURSOR_CONFIG_DIR", "XDG_CONFIG_HOME"):
+        for key in ("CURSOR_CONFIG_DIR", "XDG_CONFIG_HOME", "XDG_STATE_HOME"):
             env.pop(key, None)
+        # The install record lives under LOCALAPPDATA on Windows; keep it in the temporary home.
+        env.update(LOCALAPPDATA=str(self.home / "AppData/Local"))
         env.update(HOME=str(self.home), USERPROFILE=str(self.home),
                    HERMES_HOME=str(self.home / ".hermes"),
                    DOTAGENTS_TEST_HOME=str(self.home),
@@ -86,7 +111,7 @@ class PowerShellInstallerTests(unittest.TestCase):
             "$ErrorActionPreference = 'Stop'; "
             "Set-Variable -Name HOME -Value $env:DOTAGENTS_TEST_HOME -Force; "
             + setup + "; $originalHermesHome = $env:HERMES_HOME; "
-            "try { & $env:DOTAGENTS_TEST_INSTALLER -Copy " + " ".join(flags)
+            "try { & $env:DOTAGENTS_TEST_INSTALLER " + ("-Copy " if copy else "") + " ".join(flags)
             + " } finally { if ($env:HERMES_HOME -cne $originalHermesHome) { throw 'home not restored' } }"
         )
         result = subprocess.run(
@@ -303,6 +328,178 @@ class PowerShellInstallerTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(), original)
         self.assertEqual(self.backups(path), [])
         self.assertFalse(any(c["args"][1] == "set" for c in self.hermes_calls()))
+
+    def personalities(self, path):
+        return json.loads(path.read_text(encoding="utf-8-sig")).get("agent", {}).get("personalities", {})
+
+    def generated_personality(self, name):
+        text = (REPO / "generated/hermes/personalities" / (name + ".yaml")).read_text(encoding="utf-8")
+        return {key: json.loads(value) for key, value in (line.split(": ", 1) for line in text.splitlines()
+                                                         if not line.startswith("#"))}
+
+    def state_path(self):
+        base = self.home / ("AppData/Local" if os.name == "nt" else ".local/state")
+        return base / "dotagents/install-state.json"
+
+    def state(self):
+        path = self.state_path()
+        return json.loads(path.read_text()) if path.exists() else None
+
+    def test_hermes_personalities_added_then_current(self):
+        path = self.seed_hermes([])
+        original = path.read_bytes()
+        result = self.run_installer("-NoStatusline", "-NoAttribution", setup=FAKE_HERMES, personalities=True)
+        self.assertIn("added: personality reviewer", result.stdout)
+        names = sorted(p.stem for p in (REPO / "generated/hermes/personalities").glob("*.yaml"))
+        self.assertEqual(sorted(self.personalities(path)), names)
+        self.assertEqual(self.personalities(path)["reviewer"], self.generated_personality("reviewer"))
+        self.assertEqual([b.read_bytes() for b in self.backups(path)], [original])
+        owned = self.state()["hermes_personalities"][str(path)]
+        self.assertEqual(sorted(owned), names)
+        after = path.read_bytes()
+        result = self.run_installer("-NoStatusline", "-NoAttribution", setup=FAKE_HERMES, personalities=True)
+        self.assertIn("ok: personality reviewer is current", result.stdout)
+        self.assertEqual(path.read_bytes(), after)
+
+    def test_hermes_personality_ownership_matches_bash_digest(self):
+        path = self.seed_hermes([])
+        self.run_installer("-NoStatusline", "-NoAttribution", setup=FAKE_HERMES, personalities=True)
+        value = self.generated_personality("coder")
+        digest = "sha256:" + __import__("hashlib").sha256(
+            (value["description"] + "\0" + value["system_prompt"]).encode()).hexdigest()
+        self.assertEqual(self.state()["hermes_personalities"][str(path)]["coder"], digest)
+
+    def test_hermes_foreign_personality_needs_force(self):
+        path = self.seed_hermes([])
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        mine = {"description": "mine", "system_prompt": "my reviewer"}
+        data["agent"] = {"personalities": {"reviewer": mine}}
+        path.write_text(json.dumps(data))
+        result = self.run_installer("-NoStatusline", "-NoAttribution", setup=FAKE_HERMES, personalities=True)
+        self.assertIn("skip: personality reviewer exists and was not set by this installer", result.stdout)
+        self.assertEqual(self.personalities(path)["reviewer"], mine)
+        result = self.run_installer("-NoStatusline", "-NoAttribution", "-Force", setup=FAKE_HERMES,
+                                    personalities=True)
+        self.assertIn("replaced (-Force", result.stdout)
+        self.assertEqual(self.personalities(path)["reviewer"], self.generated_personality("reviewer"))
+
+    def test_hermes_owned_personality_updates_and_removed_role_is_reported(self):
+        path = self.seed_hermes([])
+        self.run_installer("-NoStatusline", "-NoAttribution", setup=FAKE_HERMES, personalities=True)
+        older = {"description": "old", "system_prompt": "old prompt"}
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        data["agent"]["personalities"]["reviewer"] = older
+        data["agent"]["personalities"]["retired"] = older
+        path.write_text(json.dumps(data))
+        state = self.state()
+        digest = "sha256:" + __import__("hashlib").sha256(b"old\0old prompt").hexdigest()
+        state["hermes_personalities"][str(path)].update(reviewer=digest, retired=digest)
+        self.state_path().write_text(json.dumps(state))
+        result = self.run_installer("-NoStatusline", "-NoAttribution", setup=FAKE_HERMES, personalities=True)
+        self.assertIn("updated: personality reviewer", result.stdout)
+        self.assertIn("note: personality retired was set by this installer", result.stdout)
+        self.assertEqual(self.personalities(path)["retired"], older)
+
+    def test_hermes_personality_dry_run_switch_and_failed_write(self):
+        path = self.seed_hermes([])
+        original = path.read_bytes()
+        result = self.run_installer("-DryRun", setup=FAKE_HERMES, personalities=True)
+        self.assertIn("would set agent.personalities.reviewer", result.stdout)
+        self.assertEqual(self.hermes_calls(), [])
+        self.assertEqual(path.read_bytes(), original)
+        result = self.run_installer("-NoHermes", setup=FAKE_HERMES, personalities=True)
+        self.assertIn("Hermes personalities: skipped (-NoHermes).", result.stdout)
+        result = self.run_installer("-NoHermesPersonalities", setup=FAKE_HERMES, personalities=True)
+        self.assertIn("Hermes personalities: skipped (-NoHermesPersonalities).", result.stdout)
+        self.assertEqual(self.personalities(path), {})
+        failing = self.seed_hermes([], self.home / "failing")
+        result = self.run_installer("-NoStatusline", "-NoAttribution", setup=FAKE_HERMES, check=False,
+                                    personalities=True,
+                                    extra_env={"HERMES_HOME": str(failing.parent), "FAKE_HERMES_MODE": "no-write"})
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("verification failed", result.stderr)
+        self.assertEqual(self.personalities(failing), {})
+
+    GENERATED = ((".claude/agents", "generated/claude/agents", "*.md"),
+                 (".codex/agents", "generated/codex/agents", "*.toml"),
+                 (".cursor/agents", "generated/cursor/agents", "*.md"))
+
+    def test_install_generates_and_installs_agents_per_file(self):
+        result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes")
+        self.assertIn("generate_agents: ", result.stdout)
+        for target, source, pattern in self.GENERATED:
+            with self.subTest(target=target):
+                expected = sorted(p.name for p in (REPO / source).glob(pattern))
+                self.assertTrue(expected)
+                self.assertEqual(sorted(p.name for p in (self.home / target).iterdir()), expected)
+                for name in expected:
+                    self.assertEqual((self.home / target / name).read_bytes(), (REPO / source / name).read_bytes())
+        self.assertNotIn("CAI", result.stdout)
+
+    def test_symbolic_links_are_used_when_available(self):
+        if os.name == "nt":
+            self.skipTest("the Windows runner's symbolic link rights are not controlled here")
+        result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes", copy=False)
+        self.assertIn("agent files are installed as symbolic links", result.stdout)
+        link = self.home / ".claude/agents/reviewer.md"
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(link.resolve(), (REPO / "generated/claude/agents/reviewer.md").resolve())
+        result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes", copy=False)
+        self.assertIn("ok: " + str(link) + " (already linked)", result.stdout)
+
+    def test_older_layout_links_and_owned_copies_become_symbolic_links(self):
+        if os.name == "nt":
+            self.skipTest("the Windows runner's symbolic link rights are not controlled here")
+        self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes")
+        copied = self.home / ".claude/agents/coder.md"
+        self.assertFalse(copied.is_symlink())
+        old = self.home / ".claude/agents/reviewer.md"
+        old.unlink()
+        old.symlink_to(REPO / "agents/reviewer.md")
+        result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes", copy=False)
+        self.assertIn("relink: " + str(old), result.stdout)
+        self.assertEqual(old.resolve(), (REPO / "generated/claude/agents/reviewer.md").resolve())
+        self.assertTrue(copied.is_symlink())
+
+    def test_generated_agent_switches(self):
+        result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes",
+                                    "-NoCodexAgents", "-NoCursorAgents")
+        self.assertIn("skipped (-NoCodexAgents).", result.stdout)
+        self.assertIn("skipped (-NoCursorAgents).", result.stdout)
+        self.assertFalse((self.home / ".codex/agents").exists())
+        self.assertFalse((self.home / ".cursor/agents").exists())
+        self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes", "-DryRun")
+        self.assertFalse((self.home / ".codex/agents").exists())
+
+    def test_without_python_agent_steps_are_skipped(self):
+        path = self.seed_hermes([])
+        result = self.run_installer("-NoStatusline", "-NoAttribution",
+                                    setup=FAKE_HERMES + "; $env:PATH = ''", personalities=True)
+        self.assertIn("Python 3.9 or newer not found", result.stdout)
+        self.assertFalse((self.home / ".claude/agents").exists())
+        self.assertEqual(self.personalities(path), {})
+
+    def test_stale_installed_file_is_refreshed_but_user_edit_needs_force(self):
+        self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes")
+        installed = self.home / ".claude/agents/reviewer.md"
+        source = REPO / "generated/claude/agents/reviewer.md"
+        # What regeneration leaves behind: the old content this installer placed.
+        # Write bytes, since text mode would add a carriage return on Windows.
+        installed.write_bytes(b"older generation\n")
+        state_path = self.state_path()
+        state = json.loads(state_path.read_text())
+        keys = [key for key in state["file_links"] if os.path.normcase(key) == os.path.normcase(str(installed))]
+        self.assertEqual(len(keys), 1, sorted(state["file_links"]))
+        state["file_links"][keys[0]] = __import__("hashlib").sha256(b"older generation\n").hexdigest()
+        state_path.write_text(json.dumps(state))
+        result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes")
+        self.assertIn("refresh: " + str(installed), result.stdout)
+        self.assertEqual(installed.read_bytes(), source.read_bytes())
+        # A user's edit does not match the record, so it stays unless -Force.
+        installed.write_bytes(b"my edit\n")
+        result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes")
+        self.assertIn("skip: " + str(installed) + " differs from source", result.stdout)
+        self.assertEqual(installed.read_bytes(), b"my edit\n")
 
     def test_requires_powershell_7(self):
         self.assertRegex(INSTALLER.read_text(encoding="utf-8"),

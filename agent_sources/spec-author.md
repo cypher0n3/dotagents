@@ -1,13 +1,11 @@
 ---
+schema: 1
 name: spec-author
 description: Writes and revises requirements and technical specifications to the repository's own documentation standards, then lints them. Use this agent when a change needs its requirements or technical specification drafted, extended, or reorganized.
-model: sonnet
+model: standard
 color: purple
-tools: Read, Grep, Glob, Bash, Write, Edit
-skills:
-  - spec-authoring
-  - requirements-authoring
-  - markdown-writer
+tools: [Read, Grep, Glob, Bash, Write, Edit]
+skills: [spec-authoring, requirements-authoring, markdown-writer]
 ---
 # Spec Author
 

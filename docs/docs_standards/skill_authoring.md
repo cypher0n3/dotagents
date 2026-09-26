@@ -29,7 +29,8 @@ Every `SKILL.md` opens with YAML frontmatter delimited by `---` lines.
   Set it to `true` for a skill the user calls deliberately by name, such as `/make-commit`.
 - `license`, `compatibility`, and `metadata` are specification fields.
   `compatibility` is capped at 500 characters and should appear only when the skill has real environment requirements; `metadata` is the specification's home for arbitrary extra keys.
-- `disable-model-invocation` prevents the model from invoking the skill on its own.
+- `disable-model-invocation` prevents the model from invoking the skill on its own only in consumers that enforce it.
+  Hermes and CAI do not currently enforce this field; see the [Hermes](../../README.md#hermes-agent) and [CAI](../../README.md#cai) integration boundaries.
   Set it together with `user-invocable: true`, since a skill with neither route available cannot be reached at all.
   Use the pair for any skill that should run only when the user asks for it by name, such as one that commits, rewrites history, or sets the terms of a whole conversation.
 - `allowed-tools`, `license`, `model`, and `version` are recognized when a target tool supports them.
@@ -94,7 +95,7 @@ They are still held to one sentence per line so that edits produce readable diff
 
 ## Portability Across Agent Tools
 
-The same directory is read by Claude Code, Codex, Cursor, Gemini, Grok, and GitHub Copilot in VS Code through the links that `just install` creates, and by Hermes Agent through external-directory registration.
+The same directory is read by Claude Code, Codex, Cursor, Gemini, Grok, and GitHub Copilot in VS Code through the links that `just install` creates, by Hermes Agent through external-directory registration, and by CAI through native discovery of `~/.agents/skills/`.
 Write skills so that nothing breaks when a tool that lacks a given feature loads them.
 
 - Do not hardcode absolute paths, machine names, or a single tool's directory layout.

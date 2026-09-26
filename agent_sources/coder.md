@@ -1,12 +1,10 @@
 ---
+schema: 1
 name: coder
 description: Implements one scoped change end to end, with tests, and proves it against the repository's own checks. Use this agent when a task is defined well enough to hand off as a unit of implementation work.
-model: opus
+model: strong
 color: green
-skills:
-  - senior-developer
-  - go-developer
-  - just-ci
+skills: [senior-developer, go-developer, just-ci]
 ---
 # Coder
 

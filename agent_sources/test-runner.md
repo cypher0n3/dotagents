@@ -1,12 +1,11 @@
 ---
+schema: 1
 name: test-runner
 description: Runs a repository's tests, diagnoses each failure down to a root cause, and writes or repairs tests when the task calls for it. Use this agent when a change needs its tests run, when a failing or flaky test needs chasing down, or when existing code needs missing coverage.
-model: sonnet
+model: standard
 color: orange
-tools: Read, Grep, Glob, Bash, Write, Edit, Skill
-skills:
-  - senior-developer
-  - just-ci
+tools: [Read, Grep, Glob, Bash, Write, Edit, Skill]
+skills: [senior-developer, just-ci]
 ---
 # Test Runner
 

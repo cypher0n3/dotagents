@@ -16,9 +16,14 @@ default:
 setup: install-markdownlint
     @echo "Setup complete. Run: just ci"
 
-# Local CI: everything that gates a merge in this repository.
-ci: docs-check validate-skills validate-agents validate-skills-spec test-python test-powershell lint-sh
+# Local CI: everything that gates a merge in this repository. Agents are
+# generated first, so every later check sees the current generated files.
+ci: generate-agents docs-check validate-skills validate-agents validate-skills-spec test-python test-powershell lint-sh
     @:
+
+# Generate every tool's agent files from agent_sources/ into generated/, which is not committed.
+generate-agents:
+    @python3 "{{ root_dir }}/.ci_scripts/generate_agents.py"
 
 # All documentation checks: Markdown lint plus internal link validation.
 docs-check: lint-md validate-doc-links
@@ -46,7 +51,11 @@ install-markdownlint:
     ln -sfn "$REPO_DIR/markdownlint-rules" "$RULES_DIR"
     echo "Custom markdownlint rules installed in $RULES_DIR."
 
-# Lint Markdown and apply automatic fixes. Pass paths or omit for the whole repo.
+# Lint Markdown and apply automatic fixes, or only check under CI. Pass paths or
+# omit for the whole repo.
+# The whole-repo run skips symlinked entries in skills/, such as locally linked
+# system skills: their content is not ours, and --fix would rewrite the target.
+# It also skips generated/, which holds uncommitted output of agent_sources/.
 lint-md *PATHS:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -55,19 +64,31 @@ lint-md *PATHS:
         echo "Error: .markdownlint-rules missing. Run: just install-markdownlint"
         exit 1
     fi
+    # Fix locally; under CI (the CI environment variable is set), only check.
+    fix=(--fix)
+    case "$(printf '%s' "${CI:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
+        "" | 0 | false) ;;
+        *) fix=() ;;
+    esac
     if [ -z "{{ PATHS }}" ]; then
-        markdownlint-cli2 --fix '**/*.md'
+        excludes=()
+        while IFS= read -r link; do
+            excludes+=("!${link}/**" "!${link}")
+        done < <(find skills -mindepth 1 -maxdepth 1 -type l | sort)
+        # Generated agents are not committed; their sources in agent_sources/ are linted instead.
+        excludes+=("!generated/**" "!.generated.*/**")
+        markdownlint-cli2 "${fix[@]}" '**/*.md' "${excludes[@]}"
     else
-        markdownlint-cli2 --fix {{ PATHS }}
+        markdownlint-cli2 "${fix[@]}" {{ PATHS }}
     fi
 
 # Validate skill frontmatter, naming, and agent manifests.
 validate-skills:
     @python3 "{{ root_dir }}/.ci_scripts/validate_skills.py" "{{ root_dir }}/skills"
 
-# Validate Claude Code agent frontmatter, preloaded skills, and the agent index.
-validate-agents:
-    @python3 "{{ root_dir }}/.ci_scripts/validate_agents.py" "{{ root_dir }}/agents" "{{ root_dir }}/skills"
+# Validate the generated Claude Code agents, their preloaded skills, and the agent index.
+validate-agents: generate-agents
+    @python3 "{{ root_dir }}/.ci_scripts/validate_agents.py" "{{ root_dir }}/generated/claude/agents" "{{ root_dir }}/skills" --index "{{ root_dir }}/agent_sources/README.md"
 
 # Validate skills with the Agent Skills reference validator (skills-ref). Skipped locally, and an error under CI, when it is absent.
 validate-skills-spec:
@@ -137,7 +158,7 @@ lint-sh:
     fi
     shellcheck scripts/*.sh claude/*.sh cursor/*.sh
 
-# Link the skills, Claude agents, and global AGENTS.md into ~/.claude, ~/.cursor, ~/.gemini, ~/.codex, and ~/.grok.
+# Generate the agents, link them, the skills, and the global AGENTS.md into each tool, and register Hermes skills and personalities.
 install *ARGS:
     @bash "{{ root_dir }}/scripts/install.sh" {{ ARGS }}
 
@@ -150,5 +171,5 @@ clean:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{ root_dir }}"
-    rm -rf .markdownlint-repo .markdownlint-rules .ci_scripts/__pycache__
+    rm -rf .markdownlint-repo .markdownlint-rules .ci_scripts/__pycache__ generated
     echo "Removed local lint tooling and caches."

@@ -4,6 +4,8 @@ __pycache__/
 .claude/
 .codex/
 .cursor/
+.generated.*/
+generated/
 .markdownlint-repo/
 .markdownlint-rules
 .markdownlint-rules/

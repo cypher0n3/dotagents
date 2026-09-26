@@ -1,12 +1,11 @@
 ---
+schema: 1
 name: feature-author
 description: Writes and revises Gherkin feature files that trace to the repository's requirements and specifications, then lints them. Use this agent when business scenarios need to be captured or updated as feature files.
-model: sonnet
+model: standard
 color: yellow
-tools: Read, Grep, Glob, Bash, Write, Edit
-skills:
-  - feature-files-authoring
-  - markdown-writer
+tools: [Read, Grep, Glob, Bash, Write, Edit]
+skills: [feature-files-authoring, markdown-writer]
 ---
 # Feature Author
 

@@ -4,13 +4,13 @@
 
 This document explains how to set up `dotagents` on Windows with PowerShell and GitHub Copilot in VS Code.
 No administrator rights or Developer Mode are required.
-The installer uses directory junctions and hard links instead of symbolic links, neither of which needs elevation.
+The installer uses symbolic links for files when Windows allows them, as the Unix installer does, and otherwise falls back to hard links and copies, which need no elevation.
 
 ## Prerequisites
 
 - **PowerShell 7 or higher** (`pwsh` on `PATH`; install separately from Windows PowerShell)
 - **Git for Windows** (for cloning and git operations)
-- **Python 3.x** (for validation scripts)
+- **Python 3.9 or newer** (to generate the agents and run the validation scripts; without it the installer skips only the agent steps)
 - **VS Code** or **Claude Code** or **Cursor**
 - **GitHub Copilot** extension in VS Code (for GitHub Copilot integration)
 
@@ -26,18 +26,25 @@ The installer requires PowerShell 7, and the installed status line commands also
 ## How the Installer Links Files
 
 The Unix installer uses symbolic links, which on Windows require administrator rights or Developer Mode.
-To avoid that, `install.ps1` picks a link type that needs neither:
+`install.ps1` matches it wherever Windows allows, and otherwise picks a link type that needs neither:
 
 - **Skill directories** (each skill, linked into a real skills directory that each tool owns) use a **junction**.
   An older install that linked the whole `skills/` directory is migrated to a real directory, so skills a tool writes itself never land in the clone.
   Junctions need no elevation and can point across local drives, so editing a file in the clone still changes what every tool reads.
-- **Single-file targets** (each agent file, `AGENTS.md`, the status line scripts) use a **hard link** when the clone and your home directory are on the same drive.
-  Hard links also need no elevation and stay in sync with the source.
+- **Single-file targets** (each Claude, Codex, and Cursor agent file, `AGENTS.md`, the status line scripts) use a **symbolic link** when this session can create one, which needs Developer Mode or an elevated shell; the installer tests this once and says which link type it used.
+  Otherwise they use a **hard link** when the clone and your home directory are on the same drive.
+  Hard links also need no elevation and stay in sync with edits made in place.
+  Regenerating agents with `just ci`, or a `git pull` that changes a file, replaces the file in the clone instead, which leaves the hard link holding the old content.
 - When the clone and your home directory are on **different drives**, a hard link is impossible, so the file is **copied** instead.
   Copies are compared by SHA-256 hash: an identical file is left alone, and a changed file is replaced only when you pass `-Force`.
   A copied file does not update automatically, so re-run the installer after editing such a file.
+- The installer records the hash of every file it places in `%LOCALAPPDATA%\dotagents\install-state.json`.
+  A re-run refreshes an installed file that still matches that record, so re-run it after regenerating agents or pulling; a file you changed yourself is left alone unless you pass `-Force`.
+  Once symbolic links become available, a re-run replaces files it placed as copies with links.
 
-Pass `-Copy` to force copying for files even when a hard link would work.
+Pass `-Copy` to force copying for files even when a link would work.
+
+Before any agent step, the installer runs `.ci_scripts/generate_agents.py` with Python (`py -3`, `python3`, or `python`) to build `generated/` from `agent_sources/`, the same code `just ci` runs on every platform.
 
 ## Installation Steps
 
@@ -65,7 +72,10 @@ cd ~/.agents
 # -Copy                  Copy files instead of hard-linking them
 # -NoStatusline          Skip statusline script installation and configuration
 # -NoAttribution         Skip disabling agent commit/PR attribution
-# -NoHermes              Skip external skill registration with Hermes
+# -NoHermes              Skip both Hermes steps: skill registration and personalities
+# -NoCodexAgents         Skip installing the generated Codex agents
+# -NoCursorAgents        Skip installing the generated Cursor agents
+# -NoHermesPersonalities Skip setting the generated Hermes personalities
 # -DryRun                Show what would happen without making changes
 ```
 
@@ -73,7 +83,8 @@ Before changing an existing settings file, the installer saves one timestamped b
 See [Settings Backups](README.md#settings-backups) for the filename format and retention behavior.
 Cursor CLI settings honor `$env:CURSOR_CONFIG_DIR`, then `$env:XDG_CONFIG_HOME` with a `cursor` subdirectory, then `~/.cursor`; see [Cursor CLI Configuration Location](README.md#cursor-cli-configuration-location).
 
-For an existing Hermes Agent installation, keep `hermes` on `PATH`; the installer registers this clone through `skills.external_dirs` rather than replacing Hermes's own skills directory.
+For an existing Hermes Agent installation, keep `hermes` on `PATH`; the installer registers this clone through `skills.external_dirs` rather than replacing Hermes's own skills directory, and sets each generated personality under `agent.personalities`.
+A personality of the same name that the installer did not set, or that you changed after it did, is replaced only with `-Force`.
 `HERMES_HOME` selects the target configuration; otherwise native Windows uses `%LOCALAPPDATA%/hermes`.
 See [Hermes Agent](README.md#hermes-agent) for profile handling, prerequisites, and the limits of shared skills.
 
@@ -103,7 +114,8 @@ Run validation scripts:
 ```powershell
 # From the repository root
 python .ci_scripts/validate_skills.py skills
-python .ci_scripts/validate_agents.py agents skills
+python .ci_scripts/generate_agents.py
+python .ci_scripts/validate_agents.py generated/claude/agents skills --index agent_sources/README.md
 ```
 
 ## Using GitHub Copilot in Visual Studio Code
@@ -192,7 +204,7 @@ If `validate_skills.py` or `validate_agents.py` fail:
 # Run with Python directly to see full output
 python -u .ci_scripts/validate_skills.py skills
 
-# Check Python version (3.7+ required)
+# Check Python version (3.9+ required)
 python --version
 ```
 
@@ -219,7 +231,8 @@ Without `just`:
 python .ci_scripts/validate_skills.py skills
 
 # Validate all agents
-python .ci_scripts/validate_agents.py agents skills
+python .ci_scripts/generate_agents.py
+python .ci_scripts/validate_agents.py generated/claude/agents skills --index agent_sources/README.md
 
 # Validate documentation links
 python .ci_scripts/validate_doc_links.py .
@@ -252,7 +265,7 @@ python .ci_scripts/validate_skills.py skills
 
 1. **Read the documentation**: [docs/docs_standards/](docs/docs_standards/README.md)
 2. **Review skill structure**: [skills/README.md](skills/README.md)
-3. **Check agent definitions**: [agents/README.md](agents/README.md)
+3. **Check agent definitions**: [agent_sources/README.md](agent_sources/README.md)
 4. **Explore existing skills** in `skills/` directory
 
 ## Additional Resources

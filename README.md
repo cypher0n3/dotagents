@@ -2,16 +2,17 @@
 
 [![License: MIT + CC BY 4.0](https://img.shields.io/badge/License-MIT%20%2B%20CC%20BY%204.0-blue.svg)](LICENSE)
 [![Skills](https://img.shields.io/badge/skills-21-blueviolet)](skills/README.md)
-[![Agents](https://img.shields.io/badge/agents-9-blueviolet)](agents/README.md)
+[![Agents](https://img.shields.io/badge/agents-9-blueviolet)](agent_sources/README.md)
 [![Docs](https://img.shields.io/badge/docs-standards-informational)](docs/docs_standards/README.md)
 
 ## Overview
 
 These are my agent skills and instructions, kept in one place and shared across every agent tool I use.
 One directory under [`skills/`](skills/README.md) is one skill.
-Claude Code, Codex, Cursor, Gemini, Grok, and GitHub Copilot in VS Code read that directory through symlinks; Hermes Agent scans it as an external skill directory.
-I edit a skill once and it takes effect everywhere the next time a session starts.
-One file under [`agents/`](agents/README.md) is one Claude Code subagent that preloads the skills its role needs, linked into `~/.claude/agents` the same way.
+Claude Code, Codex, Cursor, Gemini, Grok, and GitHub Copilot in VS Code read that directory through symlinks; Hermes Agent scans it as an external skill directory, and CAI discovers `~/.agents/skills/` natively.
+I edit a skill once and consumers pick it up through their normal reload or session-start behavior.
+One file under [`agent_sources/`](agent_sources/README.md) is one agent that preloads the skills it needs, and is the only place that agent is written.
+`just ci` and `just install` generate it as a Claude Code subagent, a Codex agent, a Cursor agent, and a Hermes personality, each installed the way its tool expects, and CAI reads the file directly.
 
 They are personal and opinionated; see [Scope and Point of View](#scope-and-point-of-view) before adopting them wholesale.
 
@@ -36,21 +37,22 @@ Where a skill can discover a convention from the repository it is running in, I 
 
 - 🧩 **One source of truth**: every agent tool reads the same `skills/` directory through links or external-directory registration; there are no per-tool copies to drift.
 - 🤖 **Agents built on skills**: a coder, two reviewers, test runner, researcher, planner, spec author, feature author, and docs writer, each preloading the skills for its role, with a model chosen per role.
-- 🔗 **One-command install**: `just install` creates the links each tool expects and registers the skills with an existing Hermes setup; `just install-dry-run` shows the plan first.
-- ✅ **Validated**: `just ci` checks skill frontmatter, naming, agent manifests, agent definitions, Markdown conventions, and internal links.
+- 🧬 **One file per agent**: each agent is written once in `agent_sources/` and generated for Claude Code, Codex, Cursor, and Hermes, which CAI reads directly, with every restriction a tool cannot enforce stated rather than dropped.
+- 🔗 **One-command install**: `just install` creates the links each tool expects and registers the skills and personalities with an existing Hermes setup; `just install-dry-run` shows the plan first.
+- ✅ **Validated**: `just ci` generates the agents, then checks skill frontmatter, naming, agent manifests, agent definitions, Markdown conventions, and internal links.
 - 📐 **Documented conventions**: the frontmatter contract and prose rules live in [docs/docs_standards/](docs/docs_standards/README.md), not in reviewers' heads.
-- 🪶 **No dependencies**: the checks are Python standard library plus `markdownlint-cli2`, so a fresh clone validates immediately.
+- 🪶 **No dependencies**: the checks and the agent generator are Python standard library plus `markdownlint-cli2`, so a fresh clone validates immediately.
 
 ## Quick Start
 
-Install [`just`](https://github.com/casey/just) and [`markdownlint-cli2`](https://github.com/DavidAnson/markdownlint-cli2), then clone and install:
+Install [`just`](https://github.com/casey/just), [`markdownlint-cli2`](https://github.com/DavidAnson/markdownlint-cli2), and Python 3, then clone and install:
 
 ```bash
 git clone https://github.com/cypher0n3/dotagents.git ~/.agents
 cd ~/.agents
 just setup            # fetch the custom markdownlint rules
-just install-dry-run  # review the links that would be created, changing nothing
-just install          # link skills, agents, and instructions into every agent tool
+just install-dry-run  # generate the agents and review the links that would be created
+just install          # generate the agents, install supported links, and register with Hermes
 just ci               # run the full local check suite
 ```
 
@@ -58,8 +60,9 @@ To adapt this collection as your own, fork it on GitHub and clone the fork inste
 Enable Actions on the fork so a daily workflow can merge `main` from here; see [Keeping a GitHub Fork Current](CONTRIBUTING.md#keeping-a-github-fork-current).
 
 I keep the clone at `~/.agents`, and the documentation assumes that path.
-Nothing requires it: `just install` resolves the repository root at run time and points every link at wherever the clone actually lives.
+For link-based consumers, `just install` resolves the repository root at run time and points every link at wherever the clone actually lives.
 If you move or re-clone it, run `just install --force` to repoint the links, because an existing link that points somewhere else is skipped rather than replaced.
+CAI is different: its automatic global shared-skill discovery uses `~/.agents/skills/`, and this installer does not redirect CAI to a clone elsewhere.
 
 On Unix, skill content stays in this clone.
 `just install` creates symlinks for the other tools and registers the skills directory with Hermes, so edits stay shared rather than leaving stale copies behind.
@@ -90,12 +93,16 @@ Use `just --list` to see every recipe.
 
 `just install` creates three kinds of link, because the agent tools disagree about what a skills directory is and about where global instructions live.
 
-- Per-agent links, one symlink per agent file inside `~/.claude/agents`.
-  Only Claude Code reads this file format, so only its directory receives them, and linking file by file leaves any agent already sitting there untouched.
-  Anything in that directory this repository does not provide is reported at the end of the run and never removed, so a renamed agent's dangling link is visible without putting your own agents at risk.
+- Per-agent links, one symlink per generated agent file: `generated/claude/agents/` into `~/.claude/agents`, `generated/codex/agents/` into `~/.codex/agents`, and `generated/cursor/agents/` into `~/.cursor/agents`.
+  The installer first generates them from `agent_sources/` with `.ci_scripts/generate_agents.py`, the same code `just ci` runs; `generated/` is never committed, and without Python the agent steps are skipped.
+  Each tool gets the files generated in its own format, because another tool's compatibility reader does not establish support for every field.
+  Linking file by file leaves any agent already sitting there untouched, and an older install that linked a whole agent directory is migrated to a real directory the same way skills are.
+  Anything in those directories this repository does not provide is reported at the end of the run and never removed, so a renamed agent's dangling link is visible without putting your own agents at risk.
+  `--no-codex-agents` and `--no-cursor-agents` skip their step, and a link left by the older `agents/` layout is relinked without `--force`.
 - Per-skill links, one symlink per skill inside a real directory the tool manages itself: `~/.claude/skills`, `~/.cursor/skills`, `~/.gemini/config/skills`, `~/.copilot/skills`, `~/.codex/skills`, and `~/.grok/skills`.
   A tool can write its own skills next to yours (Claude Code syncs vendored ones into `~/.claude/skills`), and a symlink to `skills/` as a whole would land that content in this repository.
   An older install that linked `skills/` as a whole is migrated to a real directory, a `skills/` entry without a `SKILL.md` is never linked, and a link to a skill that no longer exists is reported and left in place.
+  Migration does not move out anything a tool already wrote through the old link, so every `skills/` directory without a `SKILL.md` is reported for you to remove.
 - Instruction-file links, one symlink pointing at `AGENTS.md`: `~/.claude/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.cursor/rules/AGENTS.md`, `~/.gemini/GEMINI.md`, and `~/.grok/AGENTS.md`.
   The Gemini link uses that tool's own filename, which is what it reads by default.
 
@@ -140,11 +147,72 @@ HERMES_HOME="$HOME/.hermes" hermes config get skills.external_dirs --json
 
 For a custom home or profile, substitute the same `HERMES_HOME` used during installation so a sticky profile cannot redirect the check.
 
-This integration shares skills, not Claude Code's agent definitions or status-line implementation.
+Hermes has no agent files, so each agent is also set as a personality under `agent.personalities.<name>`, through `hermes config set`, from `generated/hermes/personalities/`.
+Personalities apply to a whole session once selected with `/personality`, and the installer never selects one.
+
+- An absent personality is added, and an unchanged one is left alone.
+- The installer records a digest of each personality it sets in `${XDG_STATE_HOME:-~/.local/state}/dotagents/install-state.json`, and updates a personality without `--force` only while its value still matches that record.
+- A personality of the same name that the installer did not set, or that you edited after it did, is skipped unless you pass `--force`; the previous value survives in the configuration backup.
+- A personality whose agent no longer exists is reported and left in place.
+- `--no-hermes-personalities` skips this step; `--no-hermes` skips it and the skill registration.
+
+This integration does not share Claude Code's status-line implementation.
 The installer does not create `~/.hermes/AGENTS.md`, which is not a global instruction file for Hermes, and does not replace `SOUL.md` with this repository's instructions.
 Hermes reads project context files independently; an `AGENTS.override.md` replaces the adjacent `AGENTS.md` rather than supplementing it.
 Tool-specific invocation metadata such as `disable-model-invocation` is not a portable enforcement boundary.
 See the [Hermes skills documentation](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills) and [project context documentation](https://hermes-agent.nousresearch.com/docs/user-guide/features/context-files).
+
+### CAI
+
+CAI (Cypher's Agent Interface) discovers `~/.agents/skills/` directly, with no installer link, package copy, or YAML setting required for a clone at `~/.agents`.
+Neither installer changes CAI configuration, instructions, personas, or native skills.
+This integration targets CAI's Linux/XDG layout; it does not imply native Windows support.
+
+For a single project, skill-name precedence is:
+
+1. Project `.cai/skills/`.
+2. Project `.agents/skills/`.
+3. CAI's configured native global skills directory, defaulting to `$XDG_CONFIG_HOME/cai/skills/`.
+4. Global `~/.agents/skills/`.
+5. CAI built-in skills.
+6. Enabled product-specific foreign skills, currently project `.cursor/skills/`.
+
+The first valid candidate wins; definitions do not merge.
+Multi-project workspaces also include their member-project roots before global roots.
+CAI watches shared skill roots for changes, while active skills remain bound to their selected source rather than silently switching to a new same-name winner.
+
+The supported CAI global configuration root for this integration is `$XDG_CONFIG_HOME/cai`, falling back to `~/.config/cai` when `XDG_CONFIG_HOME` is unset.
+`CAI_CONFIG`, when present, selects a custom configuration file, primarily for testing and custom configurations; it is not a fully supported relocation mechanism for all global artifacts.
+Current instruction discovery can follow that file's directory while other artifacts retain their XDG root.
+Do not infer skill, persona, or instruction installation destinations from `CAI_CONFIG`; this integration writes none of them.
+
+In a running CAI session, inspect the shared catalog without activating skills:
+
+```text
+/skills --all ~/.agents/skills
+```
+
+Check the displayed source, winning or shadowed state, and compatibility markers rather than treating a successful `just install` as proof of CAI loading.
+To exercise direct activation without requesting a commit or another external effect, use a shared review skill with a read-only task:
+
+```text
+$code-review-precision Review the current diff without changing files.
+```
+
+Current compatibility boundaries are deliberate:
+
+- The tracked regular skill packages match CAI's package layout; symlinked child packages such as locally linked system skills are skipped by its scanner.
+- CAI does not automatically read `~/.agents/AGENTS.md` as global instructions and rejects symlinked instruction files.
+  The shared repository's `AGENTS.override.md` is repository-specific, not a global instruction source.
+- CAI is meant to read the agents in `~/.agents/agent_sources/` directly, as it reads `~/.agents/skills/`, so nothing is generated or installed for it; see [CAI Native Agent Sources](docs/draft_specs/cai-native-agent-sources.md) for the CAI change this needs.
+  Until CAI ships it, CAI does not see these agents.
+- CAI does not enforce `user-invocable` or `disable-model-invocation` as activation policy, and `allowed-tools` declarations do not grant or restrict authority.
+  Skill prose does not replace host-side approvals or sandbox policy.
+- [`detailed-execution-planner`](skills/detailed-execution-planner/SKILL.md) selects a native CAI planning workflow separately from Cursor's plan format.
+  [`update-cursor-todos`](skills/update-cursor-todos/SKILL.md) remains Cursor-only.
+
+CAI's shared-configuration proposal, draft 470, is deferred; this integration does not depend on its proposed runtime adapters or configuration keys.
+[Shared Agent Templates](docs/specs/shared-agent-templates.md) specifies how each tool's agents come from the shared sources.
 
 ### Cursor CLI Configuration Location
 
@@ -172,11 +240,13 @@ Dry runs, unchanged files, and files first created by the current install produc
 ## Repository Layout
 
 - [skills/](skills/README.md) - the skills themselves, one directory per skill, indexed by category.
-- [agents/](agents/README.md) - the Claude Code subagents, one file per agent, each preloading the skills for its role.
+- [agent_sources/](agent_sources/README.md) - one file per agent, the only place an agent is written, and the agent index.
+- `generated/` - each tool's agents, generated from `agent_sources/` by `just ci` and `just install` and never committed.
 - [docs/](docs/README.md) - documentation for this repository.
 - [docs/docs_standards/](docs/docs_standards/README.md) - skill, agent, and Markdown authoring standards.
-- [.ci_scripts/](.ci_scripts/README.md) - dependency-free validation helpers and their unit tests.
-- [scripts/](scripts/install.sh) - the symlink installer.
+- [docs/specs/](docs/specs/README.md) - specifications for implemented designs.
+- [.ci_scripts/](.ci_scripts/README.md) - dependency-free validation helpers, the agent generator, and their unit tests.
+- [scripts/](scripts/install.sh) - the installers.
 - [claude/](claude/statusline-command.sh) - Claude Code configuration kept in this repository and linked into `~/.claude`.
 - [cursor/](cursor/statusline-command.sh) - Cursor CLI configuration kept in this repository and linked into `~/.cursor`.
 - [justfile](justfile) - setup, install, lint, and validation entry points.
@@ -196,18 +266,20 @@ Run `just install` again to link the new skill into every tool's skills director
 
 ## Adding an Agent
 
-Create `agents/<agent-name>.md` with `name`, `description`, and `model` frontmatter, list the skills it preloads under `skills`, and write its system prompt under a single H1.
-The `name` must match the filename, every preloaded skill must exist under `skills/`, and the agent must be linked from [agents/README.md](agents/README.md).
+Create `agent_sources/<agent-name>.md` with `schema`, `name`, `description`, `model`, and `color` front matter, list the skills it preloads under `skills`, and write its instructions under a single H1.
+The `name` must match the filename, every skill must exist under `skills/`, and the agent must be linked from [the agent index](agent_sources/README.md).
+Copy an existing agent for the shape, and see [Shared Agent Templates](docs/specs/shared-agent-templates.md#agent-source-files) for every key.
 
-Read [Agent Authoring Standards](docs/docs_standards/agent_authoring.md) first, then run `just ci`.
-No new symlink is needed, because `~/.claude/agents` points at the whole directory.
+Read [Agent Authoring Standards](docs/docs_standards/agent_authoring.md) first, then run `just ci`, which generates and validates every tool's version; commit only the source.
+Run `just install` again to link the new agent into each tool, since agents are linked one file at a time.
 
 ## Documentation
 
 - [Skill Index](skills/README.md) - every skill, grouped by what it is for.
-- [Agent Index](agents/README.md) - every Claude Code agent, with its model and the skills it preloads.
+- [Agent Index](agent_sources/README.md) - every agent, with its model tier and the skills it preloads.
 - [Skill Authoring Standards](docs/docs_standards/skill_authoring.md) - the rules a skill must follow.
 - [Agent Authoring Standards](docs/docs_standards/agent_authoring.md) - the rules an agent must follow.
+- [Shared Agent Templates](docs/specs/shared-agent-templates.md) - how each agent is generated and installed for every tool.
 - [Markdown Conventions](docs/docs_standards/markdown_conventions.md) - the prose and lint conventions.
 - [meta.md](meta.md) - orientation for agents, and this repository's boundaries.
 

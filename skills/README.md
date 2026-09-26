@@ -3,15 +3,16 @@
 ## Overview
 
 Each subdirectory here is one skill, addressed by its directory name and defined by its `SKILL.md`.
-Agent tools read this directory through the links created by `just install`, or through external-directory registration for Hermes Agent, so a change to a skill takes effect the next time an agent session starts.
+Agent tools read this directory through installed links, Hermes Agent external-directory registration, or CAI native discovery of `~/.agents/skills/`.
+Changes take effect through each consumer's normal reload or session-start behavior; CAI watches its shared roots.
 See [Skill Authoring Standards](../docs/docs_standards/skill_authoring.md) before adding or editing a skill.
-The Claude Code agents in [`agents/`](../agents/README.md) preload skills from here by name, so renaming a skill also breaks any agent that lists it.
+The agents in [`agent_sources/`](../agent_sources/README.md) preload skills from here by name, so renaming a skill also breaks any agent that lists it.
 
 These skills are opinionated and reflect my own experience working with AI coding tools; see [Scope and Point of View](../README.md#scope-and-point-of-view) for the assumptions they carry and what to adapt before using them in another repository.
 The skills are licensed under CC BY 4.0 and carry no per-file license notice; see [Licensing](../CONTRIBUTING.md#licensing) for how to attribute one you copy or adapt.
 
 The *(user-invoked only)* label describes the intended invocation style; enforcement depends on the skill's `disable-model-invocation` metadata and the consuming tool.
-Do not assume Hermes enforces another tool's invocation metadata; see [Hermes Agent](../README.md#hermes-agent).
+Do not assume Hermes or CAI enforces another tool's invocation metadata; see [Hermes Agent](../README.md#hermes-agent) and [CAI](../README.md#cai).
 
 ## Design Notes
 
@@ -47,8 +48,8 @@ These skills set the implementation and review bar for code changes.
 
 These skills shape how an agent plans work and reports back on it.
 
-- [`detailed-execution-planner`](detailed-execution-planner/SKILL.md) *(user-invoked only)* - Creates and updates detailed execution plans as markdown checklists.
-- [`update-cursor-todos`](update-cursor-todos/SKILL.md) *(user-invoked only)* - Update Cursor plan and agent todo items.
+- [`detailed-execution-planner`](detailed-execution-planner/SKILL.md) *(user-invoked only)* - Creates and updates test-gated Cursor plans or native CAI execution plans.
+- [`update-cursor-todos`](update-cursor-todos/SKILL.md) *(user-invoked only)* - Updates Cursor plan and agent todo items; does not synchronize CAI plans.
 - [`grill-me`](grill-me/SKILL.md) - Prompt me with questions, one at a time, until we have a shared understanding.
 - [`agent-feedback`](agent-feedback/SKILL.md) *(user-invoked only)* - Quick prompt to indicate that the provided info was produced by another agent for consideration.
 

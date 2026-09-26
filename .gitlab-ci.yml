@@ -21,7 +21,8 @@ check:skills:
     - apt-get update && apt-get install -y --no-install-recommends ca-certificates git jq just
     - pip install --root-user-action=ignore --no-cache-dir skills-ref==0.1.1
   script:
-    - just validate-skills validate-skills-spec validate-agents validate-doc-links test-python
+    # Agents are generated first, because nothing generated is committed.
+    - just generate-agents validate-skills validate-skills-spec validate-agents validate-doc-links test-python
 
 check:docs:
   stage: check
@@ -31,9 +32,8 @@ check:docs:
     - npm install -g markdownlint-cli2@0.23.3
     - just install-markdownlint
   script:
-    # lint-md applies fixes, so fail when it had anything to fix.
+    # lint-md only checks under CI, so anything fixable fails here.
     - just lint-md
-    - git diff --exit-code
 
 check:shell:
   stage: check

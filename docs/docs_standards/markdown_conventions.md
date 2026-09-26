@@ -49,3 +49,4 @@ Every other rule, including one sentence per line, applies to skill files exactl
 
 Run `just install-markdownlint` once to fetch the custom rules into the ignored `.markdownlint-rules/` directory.
 After that, `just lint-md` fixes what it can and reports the rest, and `just docs-check` adds link validation.
+Under CI, where the `CI` environment variable is set, `just lint-md` only checks, so anything it would fix fails the run.

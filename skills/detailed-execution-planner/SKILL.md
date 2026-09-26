@@ -1,6 +1,6 @@
 ---
 name: detailed-execution-planner
-description: Creates and updates detailed execution plans as markdown checklists. Use when the user asks to create, refine, expand, or update a plan. Invoke only when explicitly called by user. Intended only for Cursor (*.plan.md) or CAI plans.
+description: Creates and updates test-gated Cursor or native CAI execution plans. Invoke only when explicitly called by user.
 user-invocable: true
 disable-model-invocation: false
 ---
@@ -9,6 +9,7 @@ disable-model-invocation: false
 ## Skill Purpose
 
 Write detailed execution plans that are specific, test-gated, and aligned with requirements and technical specifications.
+Invoke this workflow only when explicitly requested by the user.
 
 ## Use This Skill When
 
@@ -23,9 +24,20 @@ Ask the user detailed questions about anything on which you are not 100% certain
 Ask questions one at a time.
 Continue asking questions until you are sure you have all needed information and there are zero ambiguities.
 
+## Select the Plan Target
+
+Determine the requested consumer from the user's request, the existing plan artifact, and the available host tools before choosing a format.
+If those signals conflict or neither Cursor nor CAI is established, ask which target is intended rather than guessing or combining schemas.
+
+- For CAI `.caip.md` plans, read and follow [CAI Planning Workflow](references/cai-plans.md), including its validation and update rules.
+  Do not use the Cursor template, `todos` frontmatter, or Cursor TODO synchronization for CAI.
+  After completing that workflow, stop; every section below this target-selection section applies only to Cursor plans.
+- For Cursor `.plan.md` plans, follow the remaining sections and the Cursor template they reference.
+  Keep native CAI fields and lifecycle operations out of the Cursor artifact.
+
 ## Cursor Plan Frontmatter (Required)
 
-Every generated plan **must** begin with YAML frontmatter that matches the **Cursor plan** shape so plans can be imported and tracked as todos.
+For Cursor plans only, every generated plan **must** begin with YAML frontmatter that matches the **Cursor plan** shape so plans can be imported and tracked as todos.
 
 - `name`: short human-readable plan title (string).
 - `overview`: multi-line summary of goal, scope, and approach (YAML `|` block string).
