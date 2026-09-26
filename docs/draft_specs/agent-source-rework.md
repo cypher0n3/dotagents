@@ -157,9 +157,9 @@ The generator code lives separately in `tools/agentgen/`.
       claude: opus
       tier: strong
       cai:
-        - qwen3.8:35b
-        - qwen3.6:35b
-        - qwen3.8:27b
+        - ollama-local/qwen3.8:35b
+        - ollama-local/qwen3.6:35b
+        - ollama-local/qwen3.8:27b
       codex: gpt-6-astra
       cursor: grok4.7
     effort: high
@@ -167,13 +167,36 @@ The generator code lives separately in `tools/agentgen/`.
 
     - The model identifiers in this example are illustrative and are not checked against any provider; the generator passes each tool's value through unchanged.
     - A key other than `tier` is a tool name, and its value is that tool's model.
-      It is a single identifier for every tool except CAI, whose value may be an ordered preference list rendered as CAI's native `preferred_models`; a list for any other tool fails generation.
+      It is a single identifier for every tool except CAI, whose value may be an ordered preference list; a list for any other tool fails generation.
+    - CAI identifiers must be backend-qualified (`<backend_id>/<model>`, such as `ollama-local/qwen3.8:35b`), provider-qualified (`<provider>.<model>`), or a configured alias, per CAI's model identifier format; `ollama-local` in the example is illustrative and must match a backend configured in CAI.
     - A tool's own value wins; otherwise `tier` is mapped through the generator's tier table for that tool; otherwise the tool uses its session's model.
     - The short form `model: strong` remains valid and means a tier with no per-tool values, and an agent with no `model` key uses each tool's session model.
     - `effort` is optional and takes `low`, `medium`, `high`, `xhigh`, or `max`, matching Claude Code.
       It renders as `effort` for Claude Code and `model_reasoning_effort` for Codex, where `max` becomes `xhigh`.
       Tools with no known effort field receive it as a comment, and Hermes receives it in its explainer.
 
+18. The CAI target follows CAI's `usability_fixes` branch at `b1db6c5` (2026-09-25), recorded below under CAI evidence, rather than the original draft.
+    - A single CAI model renders as `models.default`, and a list renders as `models.preferred`, never as the legacy `model` or `preferred_models` keys.
+      CAI rewrites a persona file that uses the legacy keys on discovery, and would do so through the installer's symbolic link into `generated/`.
+    - Required and suggested skills render natively as `required_skills` and `suggested_skills`.
+    - `readonly`, `tools`, and `effort` have no CAI field, so they render as comments, which CAI's YAML parser ignores.
+    - Personas are installed as symbolic links, which CAI now follows safely, so the dependency on a CAI change is gone.
+
+## CAI Evidence
+
+Read from `https://gitlab.com/cypher_zero/cai`, branch `usability_fixes`, commit `b1db6c59bda7c77620380062fb67172bd0f1f190` (2026-09-25), in `docs/tech_specs/personas.md`, `docs/tech_specs/inference/model_selection.md`, and `internal/personas/`.
+
+- A persona is Markdown with YAML front matter holding `name` and `description` (required), `models.default`, `models.preferred`, `models.selection` (`auto` or `lock`), `max_steps`, `max_turns`, `required_skills`, `suggested_skills`, `ingest_personas`, and `mcp_servers`.
+- The legacy `model` and `preferred_models` keys are still read, but discovery rewrites a writable file that uses them to the `models` keys, leaving the body byte-identical.
+- Front matter is parsed with a non-strict YAML decoder, so unknown keys and comments are ignored.
+- A persona read follows a symbolic link to its final target, requires a regular file, and verifies the opened file is the one it inspected.
+- Discovery layers are project `.cai/personas/`, then the global directory `$XDG_CONFIG_HOME/cai/personas/` (default `~/.config/cai/personas/`, overridable by the `personas.dir` configuration key), then built-in personas; the first match wins and fields never merge.
+- Model identifiers are an alias, `<backend_id>/<model>`, `<provider>.<model>`, or an unqualified name matching a known provider pattern such as `claude-*`.
+- There is no persona field for reasoning effort, read-only intent, or a tool allowlist.
+- Persisting a model from CAI's `/models` command writes `models.default` or `models.selection` into the global persona file `<personas dir>/<name>.md`, which follows a symbolic link into `generated/`.
+
 ## Open Questions
 
-- What CAI supports on its `usability_fixes` branch, which may change the CAI rendering of models, effort, read-only, tools, and skills.
+- What happens when CAI's `/models` command persists a model into an installed persona, which writes through the symbolic link into `generated/`.
+- Whether the CAI step honors a `personas.dir` override in CAI's configuration.
+- Whether the per-tool `cai:` block may set `models.selection`, `max_steps`, `max_turns`, `ingest_personas`, or `mcp_servers`.
