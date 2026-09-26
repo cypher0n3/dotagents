@@ -447,20 +447,22 @@ class PowerShellInstallerTests(unittest.TestCase):
         installed = self.home / ".claude/agents/reviewer.md"
         source = REPO / "agents/reviewer.md"
         # What regeneration leaves behind: the old content this installer placed.
-        installed.write_text("older generation\n")
+        # Write bytes, since text mode would add a carriage return on Windows.
+        installed.write_bytes(b"older generation\n")
         state_path = self.state_path()
         state = json.loads(state_path.read_text())
-        old = __import__("hashlib").sha256(b"older generation\n").hexdigest()
-        state["file_links"][str(installed)] = old
+        keys = [key for key in state["file_links"] if os.path.normcase(key) == os.path.normcase(str(installed))]
+        self.assertEqual(len(keys), 1, sorted(state["file_links"]))
+        state["file_links"][keys[0]] = __import__("hashlib").sha256(b"older generation\n").hexdigest()
         state_path.write_text(json.dumps(state))
         result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes")
         self.assertIn("refresh: " + str(installed), result.stdout)
         self.assertEqual(installed.read_bytes(), source.read_bytes())
         # A user's edit does not match the record, so it stays unless -Force.
-        installed.write_text("my edit\n")
+        installed.write_bytes(b"my edit\n")
         result = self.run_installer("-NoStatusline", "-NoAttribution", "-NoHermes")
         self.assertIn("skip: " + str(installed) + " differs from source", result.stdout)
-        self.assertEqual(installed.read_text(), "my edit\n")
+        self.assertEqual(installed.read_bytes(), b"my edit\n")
 
     def test_requires_powershell_7(self):
         self.assertRegex(INSTALLER.read_text(encoding="utf-8"),
