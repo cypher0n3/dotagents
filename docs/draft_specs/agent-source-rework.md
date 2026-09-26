@@ -51,6 +51,34 @@ The generator code lives separately in `tools/agentgen/`.
    Hermes personalities cannot set a model.
    The existing Claude Code agents therefore keep their current `model` values.
 
+5. An agent source file uses flat keys that read like a Claude Code agent, plus one optional block per tool:
+
+   ```yaml
+   ---
+   name: reviewer
+   description: Performs adversarial review of ...
+   model: strong
+   color: red
+   readonly: true
+   tools: [Read, Grep, Glob, Bash]
+   skills: [senior-developer, code-review-precision]
+   suggested_skills: []
+   codex:
+     model_reasoning_effort: high
+   ---
+   # Reviewer
+   ```
+
+   - `color` applies only to Claude Code.
+   - `readonly` and `tools` state intent; each tool enforces them where it can and states them as comments where it cannot.
+   - `skills` are loaded before the agent starts, and `suggested_skills` when a task needs them.
+   - A block named after a tool holds settings only that tool has.
+
+   No tool reads a source file directly.
+   The generator rejects any key it does not know, so a typo fails generation instead of being ignored.
+   Each generated file carries only the keys its tool is known to accept, so a key one tool does not recognize never reaches that tool, and intent a tool cannot express appears there only as a comment.
+   How each tool treats an unknown key is therefore not relied on, and has not been verified for Codex, Cursor, Hermes, or CAI.
+
 ## Open Questions
 
-- What the frontmatter keys of an agent source file are called and how they are shaped.
+- Whether every agent is generated for every tool, or an agent can opt out of some tools.
