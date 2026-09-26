@@ -120,6 +120,17 @@ The generator code lives separately in `tools/agentgen/`.
     Without Python, it skips only the agent steps (Claude Code, Codex, and Cursor agents, and Hermes personalities), says why and how to install Python, and still installs skills, instructions, and settings.
     Windows and Unix therefore produce identical output from the same code.
 
+12. The pull request's installer behaviors stay as built, repointed at `generated/`:
+    - Codex and Cursor agents are linked on every install, like the skill links, with `--no-codex-agents` and `--no-cursor-agents`.
+    - CAI personas are linked into `$XDG_CONFIG_HOME/cai/personas/`, falling back to `~/.config/cai/personas/`, only when that CAI configuration root exists, with `--no-cai-personas`.
+    - Hermes personalities are set through `hermes config set`, added when absent, updated when this installer set them and nobody changed them since, and otherwise replaced only with `--force`; ownership is recorded in `install-state.json`, and `--no-hermes-personalities` and `--no-hermes` skip the step.
+    - The Windows installer refreshes a hard link or copy it placed that no longer matches its source, and requires `-Force` for a file the user changed.
+    - Existing files are never replaced silently, and files this repository does not provide are reported, never removed.
+
+    Windows behavior matches Linux and macOS as closely as the platform allows.
+    Where the two installers differ, the difference must be forced by the platform, such as symbolic links needing elevation or Developer Mode on Windows, and must be documented.
+
 ## Open Questions
 
-- Which of the pull request's installer behaviors stay as built.
+- Whether the Windows installer installs CAI personas the same way as the Unix installer.
+- Which kind of link the Windows installer uses for generated files.
