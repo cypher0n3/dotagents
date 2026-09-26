@@ -20,8 +20,12 @@ The generator code lives separately in `tools/agentgen/`.
 
 ## Decisions
 
-No decisions are recorded yet.
+1. One file per agent is the whole source for that agent.
+   Its YAML frontmatter holds everything about the agent, including its description, model, skills, read-only intent, tool list, and any per-tool overrides, and its Markdown body holds the instructions.
+   Editing that one file changes the agent for every tool.
+   How each tool spells each field is built into the generator code, which is not edited to change an agent.
+   The separate `roles/`, `prompts/`, and per-tool profile files are removed.
 
 ## Open Questions
 
-1. What "one place" means: one file per agent, one file for every agent, or one file per agent plus one shared settings file.
+- Where the per-agent source files live, and whether the Claude Code file is generated or is the source itself.
