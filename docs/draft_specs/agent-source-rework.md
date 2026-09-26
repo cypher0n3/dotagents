@@ -116,6 +116,10 @@ The generator code lives separately in `tools/agentgen/`.
     The generator owns `generated/` outright and clears and rebuilds it on every run, so a removed agent never leaves a stale output behind.
     The installers and `validate_agents.py` read the Claude Code agents from `generated/claude/agents/`.
 
+11. The Windows installer, `scripts/install.ps1`, runs the same Python generator, found as `python` or through the `py` launcher, before any agent step.
+    Without Python, it skips only the agent steps (Claude Code, Codex, and Cursor agents, and Hermes personalities), says why and how to install Python, and still installs skills, instructions, and settings.
+    Windows and Unix therefore produce identical output from the same code.
+
 ## Open Questions
 
-- How the Windows installer runs the generator, since it needs the same Python code and today requires only PowerShell.
+- Which of the pull request's installer behaviors stay as built.
