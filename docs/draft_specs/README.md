@@ -7,5 +7,6 @@ Drafts do not change current installer behavior, generated artifacts, or the [ag
 
 ## Proposals
 
-There are no open proposals.
+- [Agent Source Rework](agent-source-rework.md) - the working record of decisions for consolidating each agent's source into one place.
+
 An implemented draft moves to [Specifications](../specs/README.md), as [Shared Agent Templates](../specs/shared-agent-templates.md) did.
