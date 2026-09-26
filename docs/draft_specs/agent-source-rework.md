@@ -79,6 +79,10 @@ The generator code lives separately in `tools/agentgen/`.
    Each generated file carries only the keys its tool is known to accept, so a key one tool does not recognize never reaches that tool, and intent a tool cannot express appears there only as a comment.
    How each tool treats an unknown key is therefore not relied on, and has not been verified for Codex, Cursor, Hermes, or CAI.
 
+6. Every agent is generated for every tool by default.
+   An agent opts out of specific tools with an optional `exclude` list, such as `exclude: [hermes]`.
+   Adding a new tool to the generator therefore needs no change to any agent file.
+
 ## Open Questions
 
-- Whether every agent is generated for every tool, or an agent can opt out of some tools.
+- Whether output files are written by Jinja templates or directly by generator code.
