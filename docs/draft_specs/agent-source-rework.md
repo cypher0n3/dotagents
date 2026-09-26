@@ -149,6 +149,31 @@ The generator code lives separately in `tools/agentgen/`.
     The pull request is squashed when it merges, so the rejected approach does not reach `main`.
     [Shared Agent Templates](../specs/shared-agent-templates.md) is rewritten to match these decisions, and this record is folded into it and removed.
 
+17. The `model` block names each tool's model directly, with `tier` as the fallback, and a separate top-level `effort` key sets reasoning effort.
+    This revises decisions 3 and 5, and replaces the `codex: { model_reasoning_effort: ... }` example in decision 5.
+
+    ```yaml
+    model:
+      claude: opus
+      tier: strong
+      cai:
+        - qwen3.8:35b
+        - qwen3.6:35b
+        - qwen3.8:27b
+      codex: gpt-6-astra
+      cursor: grok4.7
+    effort: high
+    ```
+
+    - The model identifiers in this example are illustrative and are not checked against any provider; the generator passes each tool's value through unchanged.
+    - A key other than `tier` is a tool name, and its value is that tool's model.
+      It is a single identifier for every tool except CAI, whose value may be an ordered preference list rendered as CAI's native `preferred_models`; a list for any other tool fails generation.
+    - A tool's own value wins; otherwise `tier` is mapped through the generator's tier table for that tool; otherwise the tool uses its session's model.
+    - The short form `model: strong` remains valid and means a tier with no per-tool values, and an agent with no `model` key uses each tool's session model.
+    - `effort` is optional and takes `low`, `medium`, `high`, `xhigh`, or `max`, matching Claude Code.
+      It renders as `effort` for Claude Code and `model_reasoning_effort` for Codex, where `max` becomes `xhigh`.
+      Tools with no known effort field receive it as a comment, and Hermes receives it in its explainer.
+
 ## Open Questions
 
-None; every question raised so far is decided above.
+- What CAI supports on its `usability_fixes` branch, which may change the CAI rendering of models, effort, read-only, tools, and skills.
