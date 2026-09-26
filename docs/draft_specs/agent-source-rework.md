@@ -140,6 +140,11 @@ The generator code lives separately in `tools/agentgen/`.
     With symbolic links, Windows behaves exactly like Unix, and installed agents always show the latest generation.
     With hard links or copies, it behaves as the pull request built it, including refreshing files it placed that went stale, so no administrator rights or Developer Mode are ever required.
 
+15. Generated Markdown is not linted directly.
+    `just lint-md` skips `generated/`, the same way it already skips symlinked skills, and the lint configuration files are unchanged.
+    The agent bodies are linted as sources in `agent_sources/<name>.md`, and the hosted Markdown lint job is unchanged.
+    The generator's unit tests render the text it adds to a body, the `## Skill Dependencies` section for Codex and Cursor, and check it against the Markdown rules a test can apply.
+
 ## Open Questions
 
-- Whether generated Markdown is linted, given that it is not committed and the hosted Markdown lint job has no Python to generate it.
+- How the rework lands: on the same pull request, or on a new one.
