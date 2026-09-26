@@ -182,6 +182,18 @@ The generator code lives separately in `tools/agentgen/`.
     - `readonly`, `tools`, and `effort` have no CAI field, so they render as comments, which CAI's YAML parser ignores.
     - Personas are installed as symbolic links, which CAI now follows safely, so the dependency on a CAI change is gone.
 
+19. CAI reads the dotagents agent sources natively, and dotagents stops generating and installing anything for CAI.
+    This supersedes the CAI parts of decisions 10, 12, 13, and 18: there is no `generated/cai/`, no CAI installer step on either platform, and no `--no-cai-personas` switch.
+    - CAI discovers `~/.agents/agent_sources/` as a persona layer below its project and global persona directories and above its built-in personas, the same way it already discovers `~/.agents/skills/`.
+    - CAI maps the dotagents format itself: `model.cai` becomes `models.default` for a single identifier or `models.preferred` for a list, `skills` becomes `required_skills`, `suggested_skills` is used as is, `exclude: [cai]` hides the agent, and keys for other tools are ignored.
+    - An optional `cai:` block in a source file carries CAI-only settings: `selection`, `max_steps`, `max_turns`, `ingest_personas`, and `mcp_servers`.
+      The dotagents generator validates that block, so a typo fails `just ci`, but renders nothing from it.
+    - CAI never writes into `~/.agents/agent_sources/`: no legacy-key rewrite, and no `/models` write.
+    - `/models` persistence for a persona from that layer writes a models-only overlay in CAI's own global persona directory, which CAI merges over the dotagents persona instead of replacing it.
+    - Each source file carries `schema: 1`, so CAI can refuse a format version it does not understand.
+    - Until CAI ships this reader, CAI does not see these agents, and its built-in personas are unaffected.
+    - The CAI-side change is described in a requirements note under `docs/draft_specs/` for the owner to carry to CAI, since this session cannot push to GitLab.
+
 ## CAI Evidence
 
 Read from `https://gitlab.com/cypher_zero/cai`, branch `usability_fixes`, commit `b1db6c59bda7c77620380062fb67172bd0f1f190` (2026-09-25), in `docs/tech_specs/personas.md`, `docs/tech_specs/inference/model_selection.md`, and `internal/personas/`.
@@ -197,6 +209,4 @@ Read from `https://gitlab.com/cypher_zero/cai`, branch `usability_fixes`, commit
 
 ## Open Questions
 
-- What happens when CAI's `/models` command persists a model into an installed persona, which writes through the symbolic link into `generated/`.
-- Whether the CAI step honors a `personas.dir` override in CAI's configuration.
-- Whether the per-tool `cai:` block may set `models.selection`, `max_steps`, `max_turns`, `ingest_personas`, or `mcp_servers`.
+None; decision 19 resolves the `/models`, `personas.dir`, and `cai:` block questions, because CAI no longer receives generated or installed files.
