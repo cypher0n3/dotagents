@@ -41,6 +41,16 @@ The generator code lives separately in `tools/agentgen/`.
      cursor: grok[high]
    ```
 
+4. There are four tiers, mapped for Claude Code as follows:
+   - `frontier` maps to `fable`.
+   - `strong` maps to `opus`, and is the tier for coder, reviewer, reviewer-go, and planner.
+   - `standard` maps to `sonnet`, and is the tier for researcher, test-runner, spec-author, feature-author, and docs-writer.
+   - `fast` maps to `haiku`.
+
+   Codex, Cursor, and CAI have no tier mappings yet, so their agents use the session's model until mappings are added to the generator.
+   Hermes personalities cannot set a model.
+   The existing Claude Code agents therefore keep their current `model` values.
+
 ## Open Questions
 
-- Which tier names exist, and what each maps to for each tool.
+- What the frontmatter keys of an agent source file are called and how they are shaped.
