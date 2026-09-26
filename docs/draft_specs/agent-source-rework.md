@@ -31,6 +31,16 @@ The generator code lives separately in `tools/agentgen/`.
    `just install`, `validate_agents.py`, and the hand-maintained agent index `agents/README.md` keep using `agents/` unchanged.
    The Claude Code agent is generated output, never the source.
 
+3. An agent's model is a tier word, such as `model: strong`, with optional per-tool overrides in the same file.
+   The generator code maps each tier to each tool's model; a tool with no mapping for the tier, and no override, uses its session's model.
+   An override names one tool and a model identifier that tool understands, and wins over the tier for that tool only.
+
+   ```yaml
+   model:
+     tier: strong
+     cursor: grok[high]
+   ```
+
 ## Open Questions
 
-- How an agent's model is written in its source file for each tool.
+- Which tier names exist, and what each maps to for each tool.
