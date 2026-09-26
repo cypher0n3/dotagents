@@ -130,7 +130,11 @@ The generator code lives separately in `tools/agentgen/`.
     Windows behavior matches Linux and macOS as closely as the platform allows.
     Where the two installers differ, the difference must be forced by the platform, such as symbolic links needing elevation or Developer Mode on Windows, and must be documented.
 
+13. The Windows installer installs CAI personas with the same rule as the Unix installer.
+    It uses `$env:XDG_CONFIG_HOME\cai\personas`, or `~\.config\cai\personas` when that variable is empty or blank, only when that CAI configuration folder already exists, and `-NoCaiPersonas` skips the step.
+    Without the folder it reports that it was not found, as the Unix installer does.
+    This does not claim that CAI supports Windows; the installer only acts where a CAI configuration already exists.
+
 ## Open Questions
 
-- Whether the Windows installer installs CAI personas the same way as the Unix installer.
 - Which kind of link the Windows installer uses for generated files.
