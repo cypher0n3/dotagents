@@ -32,6 +32,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # The checkout belongs to the runner's user, not the container's root, so
+      # Git refuses it until it is marked safe; test-python lists tracked files.
+      - name: Mark the checkout safe for Git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Install the Agent Skills reference validator
         run: pip install --root-user-action=ignore --no-cache-dir skills-ref==0.1.1
       # Agents are generated first, because nothing generated is committed.

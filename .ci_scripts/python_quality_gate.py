@@ -39,7 +39,12 @@ def tracked_python_paths(repository_root: Path) -> list[str]:
 
 def main() -> int:
     repository_root = Path(__file__).resolve().parent.parent
-    uncovered = uncovered_python_paths(tracked_python_paths(repository_root))
+    try:
+        tracked = tracked_python_paths(repository_root)
+    except subprocess.CalledProcessError as error:
+        print("Python quality gate cannot list tracked files: " + error.stderr.strip(), file=sys.stderr)
+        return 1
+    uncovered = uncovered_python_paths(tracked)
     if uncovered:
         print("Python quality gate does not own these tracked paths:", file=sys.stderr)
         for path in uncovered:
