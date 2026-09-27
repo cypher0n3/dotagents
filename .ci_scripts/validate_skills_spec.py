@@ -63,7 +63,7 @@ def check_skill(command: list[str], skill_dir: Path) -> list[str]:
         check=False,
     )
     output = (result.stdout + result.stderr).strip()
-    if result.returncode == 0:
+    if not result.returncode:
         if output.startswith(VALID_PREFIX):
             return []
         return [f"{skill_dir}: validator passed with unrecognized output: {output!r}"]

@@ -8,17 +8,26 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 # Directory containing this justfile (repository root).
 root_dir := justfile_directory()
 
+# Every directory holding tracked Python; .ci_scripts/python_quality_gate.py
+# rejects Python anywhere else, so lint-python cannot miss a file.
+python_roots := ".ci_scripts scripts"
+
 # Show list of available recipes (same as just --list).
 default:
     @just --list
 
 # Install the tooling the checks below need.
-setup: install-markdownlint
+setup: install-markdownlint venv
     @echo "Setup complete. Run: just ci"
 
-# Local CI: everything that gates a merge in this repository.
-ci: docs-check validate-skills validate-agents validate-skills-spec test-python test-powershell lint-sh
+# Local CI: everything that gates a merge in this repository. Agents are
+# generated first, so every later check sees the current generated files.
+ci: generate-agents docs-check validate-skills validate-agents validate-skills-spec lint-python test-python test-powershell lint-sh
     @:
+
+# Generate every tool's agent files from agent_sources/ into generated/, which is not committed.
+generate-agents:
+    @python3 "{{ root_dir }}/.ci_scripts/generate_agents.py"
 
 # All documentation checks: Markdown lint plus internal link validation.
 docs-check: lint-md validate-doc-links
@@ -46,7 +55,11 @@ install-markdownlint:
     ln -sfn "$REPO_DIR/markdownlint-rules" "$RULES_DIR"
     echo "Custom markdownlint rules installed in $RULES_DIR."
 
-# Lint Markdown and apply automatic fixes. Pass paths or omit for the whole repo.
+# Lint Markdown and apply automatic fixes, or only check under CI. Pass paths or
+# omit for the whole repo.
+# The whole-repo run skips symlinked entries in skills/, such as locally linked
+# system skills: their content is not ours, and --fix would rewrite the target.
+# It also skips generated/, which holds uncommitted output of agent_sources/.
 lint-md *PATHS:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -55,19 +68,31 @@ lint-md *PATHS:
         echo "Error: .markdownlint-rules missing. Run: just install-markdownlint"
         exit 1
     fi
+    # Fix locally; under CI (the CI environment variable is set), only check.
+    fix=(--fix)
+    case "$(printf '%s' "${CI:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
+        "" | 0 | false) ;;
+        *) fix=() ;;
+    esac
     if [ -z "{{ PATHS }}" ]; then
-        markdownlint-cli2 --fix '**/*.md'
+        excludes=()
+        while IFS= read -r link; do
+            excludes+=("!${link}/**" "!${link}")
+        done < <(find skills -mindepth 1 -maxdepth 1 -type l | sort)
+        # Generated agents are not committed; their sources in agent_sources/ are linted instead.
+        excludes+=("!generated/**" "!.generated.*/**")
+        markdownlint-cli2 "${fix[@]}" '**/*.md' "${excludes[@]}"
     else
-        markdownlint-cli2 --fix {{ PATHS }}
+        markdownlint-cli2 "${fix[@]}" {{ PATHS }}
     fi
 
 # Validate skill frontmatter, naming, and agent manifests.
 validate-skills:
     @python3 "{{ root_dir }}/.ci_scripts/validate_skills.py" "{{ root_dir }}/skills"
 
-# Validate Claude Code agent frontmatter, preloaded skills, and the agent index.
-validate-agents:
-    @python3 "{{ root_dir }}/.ci_scripts/validate_agents.py" "{{ root_dir }}/agents" "{{ root_dir }}/skills"
+# Validate the generated Claude Code agents, their preloaded skills, and the agent index.
+validate-agents: generate-agents
+    @python3 "{{ root_dir }}/.ci_scripts/validate_agents.py" "{{ root_dir }}/generated/claude/agents" "{{ root_dir }}/skills" --index "{{ root_dir }}/agent_sources/README.md"
 
 # Validate skills with the Agent Skills reference validator (skills-ref). Skipped locally, and an error under CI, when it is absent.
 validate-skills-spec:
@@ -77,14 +102,78 @@ validate-skills-spec:
 validate-doc-links:
     @python3 "{{ root_dir }}/.ci_scripts/validate_doc_links.py" "{{ root_dir }}"
 
-# Run the offline Python unit tests for the CI helper scripts, except the PowerShell installer tests (see test-powershell).
+# Create .venv and install the Python lint tools from .ci_scripts/requirements-lint.txt.
+venv:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{ root_dir }}"
+    python3 -m venv .venv
+    python=.venv/bin/python
+    [ -x "$python" ] || python=.venv/Scripts/python
+    "$python" -m pip install --quiet --upgrade pip
+    "$python" -m pip install --quiet -r .ci_scripts/requirements-lint.txt
+    echo "Python lint tools installed in .venv."
+
+# Lint every Python root: flake8 (style), pylint, xenon (per-function complexity),
+# radon (per-file maintainability), vulture (dead code), and bandit (security).
+# Uses .venv when present, else tools on PATH; run `just venv` to install them.
+lint-python:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    cd "{{ root_dir }}"
+    for bin in .venv/bin .venv/Scripts; do
+        if [ -d "$bin" ]; then PATH="$PWD/$bin:$PATH"; fi
+    done
+    missing=()
+    for tool in flake8 pylint xenon radon vulture bandit; do
+        command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+    done
+    if [ "${#missing[@]}" -gt 0 ]; then
+        echo "Error: ${missing[*]} not found. Run: just venv" >&2
+        exit 1
+    fi
+    read -r -a roots <<< "{{ python_roots }}"
+    failed=()
+    check() {
+        local name=$1
+        shift
+        echo "Running ${name}..."
+        "$@" || failed+=("$name")
+    }
+    # A file ranked C (maintainability index below 10) fails; radon lists only those.
+    maintainability() {
+        local low
+        low=$(radon mi --min C "${roots[@]}")
+        [ -z "$low" ] || { echo "$low"; return 1; }
+    }
+    check flake8 flake8 "${roots[@]}"
+    check pylint pylint --rcfile=.pylintrc "${roots[@]}"
+    check xenon xenon --max-absolute C "${roots[@]}"
+    check "radon mi" maintainability
+    check vulture vulture --min-confidence 80 "${roots[@]}"
+    check bandit bandit --quiet --recursive --configfile bandit.yaml "${roots[@]}"
+    if [ "${#failed[@]}" -gt 0 ]; then
+        echo "Python lint failed: ${failed[*]}" >&2
+        exit 1
+    fi
+    echo "Python lint passed."
+
+# Check that every tracked Python file is linted, compile everything, and run the
+# offline unit tests, except the PowerShell installer tests (see test-powershell).
 test-python:
     #!/usr/bin/env bash
     set -euo pipefail
-    cd "{{ root_dir }}/.ci_scripts"
+    cd "{{ root_dir }}"
+    python3 .ci_scripts/python_quality_gate.py
+    read -r -a roots <<< "{{ python_roots }}"
+    python3 -m compileall -q "${roots[@]}"
+    cd .ci_scripts
     modules=()
     for test in test_*.py; do
-        [ "$test" = test_install_powershell.py ] || modules+=("${test%.py}")
+        case "$test" in
+            test_install_powershell_*) ;;
+            *) modules+=("${test%.py}") ;;
+        esac
     done
     python3 -m unittest "${modules[@]}"
 
@@ -99,7 +188,7 @@ test-powershell:
         exit 0
     fi
     python=$(command -v python3 || command -v python)
-    exec "$python" .ci_scripts/test_install_powershell.py -v
+    exec "$python" -m unittest discover --start-directory .ci_scripts --pattern 'test_install_powershell_*.py' -v
 
 # Run the PowerShell installer tests in a PowerShell container (podman, then docker), for machines without pwsh.
 test-powershell-container:
@@ -124,7 +213,7 @@ test-powershell-container:
         --volume "{{ root_dir }}:/repo:ro,z" \
         --env PYTHONDONTWRITEBYTECODE=1 \
         --env POWERSHELL_TELEMETRY_OPTOUT=1 \
-        "$image" python3 .ci_scripts/test_install_powershell.py -v
+        "$image" python3 -m unittest discover --start-directory .ci_scripts --pattern 'test_install_powershell_*.py' -v
 
 # Lint the repository's shell scripts (shellcheck). Skipped with a notice when shellcheck is absent.
 lint-sh:
@@ -137,7 +226,7 @@ lint-sh:
     fi
     shellcheck scripts/*.sh claude/*.sh cursor/*.sh
 
-# Link the skills, Claude agents, and global AGENTS.md into ~/.claude, ~/.cursor, ~/.gemini, ~/.codex, and ~/.grok.
+# Generate the agents, link them, the skills, and the global AGENTS.md into each tool, and register Hermes skills and personalities.
 install *ARGS:
     @bash "{{ root_dir }}/scripts/install.sh" {{ ARGS }}
 
@@ -150,5 +239,5 @@ clean:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{ root_dir }}"
-    rm -rf .markdownlint-repo .markdownlint-rules .ci_scripts/__pycache__
+    rm -rf .markdownlint-repo .markdownlint-rules .ci_scripts/__pycache__ scripts/__pycache__ generated
     echo "Removed local lint tooling and caches."

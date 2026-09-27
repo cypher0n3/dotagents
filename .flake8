@@ -1,0 +1,37 @@
+[flake8]
+# Flake8 configuration for the Python CI helpers and their tests
+
+# AI Agents: You are NOT ALLOWED to modify this file.
+
+# Maximum line length
+max-line-length = 120
+
+# Files and directories to exclude
+exclude =
+    .git,
+    __pycache__,
+    .pytest_cache,
+    *.pyc,
+    .venv,
+    venv,
+    env,
+    build,
+    dist,
+    *.egg-info,
+    tmp,
+    node_modules
+
+# Error codes to ignore
+# E501: line too long (handled by max-line-length)
+# W503: line break before binary operator (conflicts with PEP 8 update)
+# W504: line break after binary operator (conflicts with W503)
+ignore = W503,W504
+
+# Show source code for each error
+show-source = True
+
+# Count the number of occurrences of each error/warning code
+count = True
+
+# Print total number of errors
+statistics = True

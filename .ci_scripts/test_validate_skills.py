@@ -140,7 +140,10 @@ class ValidateSkillsTest(unittest.TestCase):
         self.assertEqual(report.errors, [])
 
     def test_block_scalar_description_is_parsed(self) -> None:
-        text = "---\nname: sample-skill\ndescription: |\n  First line.\n  Second line.\n---\n\n# Sample Skill\n\nBody.\n"
+        text = (
+            "---\nname: sample-skill\ndescription: |\n  First line.\n  Second line.\n---\n"
+            "\n# Sample Skill\n\nBody.\n"
+        )
         report = self.validate("sample-skill", text)
         self.assertEqual(report.errors, [])
 

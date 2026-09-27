@@ -1,0 +1,9 @@
+# Python lint tools for `just lint-python`. `just venv` installs them into .venv;
+# CI installs them into its container. The CI helpers themselves stay standard
+# library only.
+flake8>=7.0
+pylint>=4.0
+radon>=6.0
+xenon>=0.9
+vulture>=2.0
+bandit>=1.8

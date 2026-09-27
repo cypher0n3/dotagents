@@ -74,6 +74,15 @@ COLORS = ("red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan")
 EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 BOOLEANS = ("true", "false")
 
+# Settings whose value must be one of a fixed set, in the order they are checked.
+ENUM_SETTINGS = {
+    "permissionMode": PERMISSION_MODES,
+    "memory": MEMORY_SCOPES,
+    "isolation": ISOLATION_MODES,
+    "color": COLORS,
+    "background": BOOLEANS,
+}
+
 MAX_NAME_LENGTH = 64
 MAX_DESCRIPTION_LENGTH = 1024
 
@@ -142,7 +151,7 @@ def parse_tool_list(raw: str) -> list[str]:
             depth += 1
         elif char == ")":
             depth = max(depth - 1, 0)
-        if char == "," and depth == 0:
+        if char == "," and not depth:
             entries.append("".join(current).strip())
             current = []
             continue
@@ -190,16 +199,8 @@ def validate_skills_exist(skills: list[str], skills_root: Path, location: str, r
             report.error(location, f"preloaded skill '{skill}' has no {SKILL_FILENAME} under {skills_root}")
 
 
-def validate_agent(agent_file: Path, skills_root: Path, report: Report) -> str | None:
-    """Validate one agent file, record findings, and return its declared name."""
-    location = str(agent_file)
-    parsed = split_frontmatter(agent_file.read_text(encoding="utf-8"))
-    if parsed is None:
-        report.error(location, "missing or unterminated YAML frontmatter")
-        return None
-    frontmatter_lines, body_lines = parsed
-    frontmatter = parse_frontmatter(frontmatter_lines)
-
+def validate_required_keys(frontmatter: dict, location: str, report: Report) -> None:
+    """Report a key Claude Code requires, or one this repository requires in addition."""
     for key in REQUIRED_KEYS:
         if not frontmatter.get(key):
             report.error(location, f"frontmatter is missing required key '{key}'")
@@ -211,7 +212,9 @@ def validate_agent(agent_file: Path, skills_root: Path, report: Report) -> str |
                 "but this repository requires it",
             )
 
-    name = str(frontmatter.get("name", ""))
+
+def validate_name(name: str, agent_file: Path, location: str, report: Report) -> None:
+    """Report a name that does not match its file, is not kebab-case, or is too long."""
     if name and name != agent_file.stem:
         report.error(location, f"frontmatter name '{name}' does not match filename '{agent_file.stem}'")
     if name and not NAME_PATTERN.match(name):
@@ -223,25 +226,14 @@ def validate_agent(agent_file: Path, skills_root: Path, report: Report) -> str |
     if len(name) > MAX_NAME_LENGTH:
         report.error(location, f"name is {len(name)} characters; the limit is {MAX_NAME_LENGTH}")
 
-    description = str(frontmatter.get("description", ""))
-    if len(description) > MAX_DESCRIPTION_LENGTH:
-        report.error(
-            location,
-            f"description is {len(description)} characters; the limit is {MAX_DESCRIPTION_LENGTH}",
-        )
 
+def validate_settings(frontmatter: dict, location: str, report: Report) -> None:
+    """Check the value of each optional setting that is present."""
     if "model" in frontmatter:
         validate_model(str(frontmatter["model"]), location, report)
-    if "permissionMode" in frontmatter:
-        validate_enum("permissionMode", str(frontmatter["permissionMode"]), PERMISSION_MODES, location, report)
-    if "memory" in frontmatter:
-        validate_enum("memory", str(frontmatter["memory"]), MEMORY_SCOPES, location, report)
-    if "isolation" in frontmatter:
-        validate_enum("isolation", str(frontmatter["isolation"]), ISOLATION_MODES, location, report)
-    if "color" in frontmatter:
-        validate_enum("color", str(frontmatter["color"]), COLORS, location, report)
-    if "background" in frontmatter:
-        validate_enum("background", str(frontmatter["background"]), BOOLEANS, location, report)
+    for key, allowed in ENUM_SETTINGS.items():
+        if key in frontmatter:
+            validate_enum(key, str(frontmatter[key]), allowed, location, report)
     if "effort" in frontmatter:
         validate_effort(str(frontmatter["effort"]), location, report)
     if "maxTurns" in frontmatter:
@@ -252,32 +244,56 @@ def validate_agent(agent_file: Path, skills_root: Path, report: Report) -> str |
         if key in frontmatter:
             validate_tools(key, str(frontmatter[key]), location, report)
 
-    skills = frontmatter.get("skills", [])
-    if isinstance(skills, list):
-        validate_skills_exist(skills, skills_root, location, report)
 
-    for key in frontmatter:
-        if key not in KNOWN_KEYS:
-            report.warn(location, f"unrecognized frontmatter key '{key}'")
-
+def validate_body(body_lines: list[str], location: str, report: Report) -> None:
+    """Report a body without a leading H1 or instructions, or with an HTML comment."""
     heading = first_body_heading(body_lines)
     if not heading.startswith("# "):
         report.error(location, "body must open with a single H1 heading")
     if not any(line.strip() and not line.startswith("# ") for line in body_lines):
         report.error(location, "body carries no instructions after the H1 heading")
-
     for number in comment_lines(body_lines):
         report.error(
             location,
             f"HTML comment on body line {number}; an agent file is loaded as raw text, "
             "so notes belong in docs/ instead",
         )
+
+
+def validate_agent(agent_file: Path, skills_root: Path, report: Report) -> str | None:
+    """Validate one agent file, record findings, and return its declared name."""
+    location = str(agent_file)
+    parsed = split_frontmatter(agent_file.read_text(encoding="utf-8"))
+    if parsed is None:
+        report.error(location, "missing or unterminated YAML frontmatter")
+        return None
+    frontmatter_lines, body_lines = parsed
+    frontmatter = parse_frontmatter(frontmatter_lines)
+
+    validate_required_keys(frontmatter, location, report)
+    name = str(frontmatter.get("name", ""))
+    validate_name(name, agent_file, location, report)
+    description = str(frontmatter.get("description", ""))
+    if len(description) > MAX_DESCRIPTION_LENGTH:
+        report.error(
+            location,
+            f"description is {len(description)} characters; the limit is {MAX_DESCRIPTION_LENGTH}",
+        )
+    validate_settings(frontmatter, location, report)
+
+    skills = frontmatter.get("skills", [])
+    if isinstance(skills, list):
+        validate_skills_exist(skills, skills_root, location, report)
+    for key in frontmatter:
+        if key not in KNOWN_KEYS:
+            report.warn(location, f"unrecognized frontmatter key '{key}'")
+
+    validate_body(body_lines, location, report)
     return name or None
 
 
-def validate_index(agents_root: Path, names: list[str], report: Report) -> None:
+def validate_index(index: Path, names: list[str], report: Report) -> None:
     """Report an agent that the index README does not link."""
-    index = agents_root / INDEX_FILENAME
     if not index.is_file():
         report.error(str(index), "agent index is missing")
         return
@@ -307,6 +323,10 @@ def main(argv: list[str] | None = None) -> int:
         default="skills",
         help="directory holding one subdirectory per skill, for preload checks (default: skills)",
     )
+    parser.add_argument(
+        "--index",
+        help="agent index that must link every agent (default: README.md in the agents directory)",
+    )
     args = parser.parse_args(argv)
 
     agents_root = Path(args.agents_root)
@@ -322,7 +342,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: no agent files found under {agents_root}", file=sys.stderr)
         return 1
     names = [validate_agent(agent_file, skills_root, report) for agent_file in agent_files]
-    validate_index(agents_root, [name for name in names if name], report)
+    index = Path(args.index) if args.index else agents_root / INDEX_FILENAME
+    validate_index(index, [name for name in names if name], report)
 
     for warning in report.warnings:
         print(f"warning: {warning}")
