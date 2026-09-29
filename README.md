@@ -166,7 +166,8 @@ See the [Hermes skills documentation](https://hermes-agent.nousresearch.com/docs
 
 ### CAI
 
-CAI (Cypher's Agent Interface) reads `~/.agents` directly: `AGENTS.md` and `AGENTS.override.md` as global instructions, `skills/` as shared skills, and, once CAI ships it, `agent_sources/` as personas.
+CAI (Cypher's Agent Interface) reads `~/.agents` directly: `AGENTS.md` as global instructions, `skills/` as shared skills, and, once CAI ships it, `agent_sources/` as personas.
+It does not load `~/.agents/AGENTS.override.md`, so this repository's own rules stay with the repository.
 A clone at `~/.agents` needs no installer link, package copy, or YAML setting.
 
 CAI does not look anywhere else, so for a clone elsewhere the installers expose it at `~/.agents` when CAI's configuration directory exists (`$XDG_CONFIG_HOME/cai`, or `~/.config/cai` when that variable is empty):
@@ -214,7 +215,6 @@ $code-review-precision Review the current diff without changing files.
 Current compatibility boundaries are deliberate:
 
 - The tracked skill packages match CAI's package layout.
-- With the clone at `~/.agents`, CAI also loads this repository's `AGENTS.override.md` as a global override, although its rules are repository-specific; a clone elsewhere avoids that, because the override is never linked.
 - CAI reads the agents in `~/.agents/agent_sources/` directly, as specified in [Shared Agent Templates](docs/specs/shared-agent-templates.md#cai), so nothing is generated for it.
   Until CAI ships that, CAI does not see these agents.
 - CAI does not enforce `user-invocable` or `disable-model-invocation` as activation policy, and `allowed-tools` declarations do not grant or restrict authority.
