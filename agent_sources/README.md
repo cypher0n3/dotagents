@@ -17,7 +17,7 @@ A project can override any agent by putting a file with the same name in its too
 
 - Claude Code, Codex, and Cursor read the generated agents that `just install` links into `~/.claude/agents`, `~/.codex/agents`, and `~/.cursor/agents`, one file at a time.
 - Hermes gets each agent as a personality that `just install` sets in its configuration.
-- CAI reads this directory directly, so its personas need no generation or installation.
+- CAI reads this directory directly from `~/.agents/agent_sources/`, so its personas need no generation; for a clone elsewhere, `just install` links the directory there.
 
 ## Agents
 

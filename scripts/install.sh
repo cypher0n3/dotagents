@@ -22,8 +22,15 @@
 # agent files, so each generated personality is set in its config through the
 # hermes CLI. A personality this installer did not set, or one changed since it
 # did, is replaced only with --force; ownership is recorded in
-# ${XDG_STATE_HOME:-~/.local/state}/dotagents/install-state.json. CAI reads
-# agent_sources/ itself, so nothing is installed for it.
+# ${XDG_STATE_HOME:-~/.local/state}/dotagents/install-state.json.
+#
+# CAI reads ~/.agents itself: AGENTS.md as global instructions, skills/, and
+# agent_sources/. A clone at ~/.agents needs nothing. For a clone anywhere else,
+# when CAI's configuration directory exists, the installer links AGENTS.md and
+# each skill into ~/.agents one at a time, and agent_sources/ as a whole, so an
+# agent added to the clone appears without reinstalling and a model CAI saves
+# with /model is written into the clone. AGENTS.override.md holds this
+# repository's own rules and is never linked. --no-cai skips the step.
 #
 # Skills are linked one directory at a time into a real skills directory that
 # each tool owns. A tool can write its own skills next to ours (Claude Code
@@ -72,6 +79,7 @@ no_hermes=0
 no_codex_agents=0
 no_cursor_agents=0
 no_hermes_personalities=0
+no_cai=0
 
 # Targets that receive one symlink per agent file. Only Claude Code reads this
 # file format today, so only its agents directory is linked.
@@ -104,7 +112,8 @@ usage() {
     cat <<'USAGE'
 Usage: install.sh [--dry-run] [--force] [--no-statusline]
                   [--no-attribution] [--no-hermes] [--no-codex-agents]
-                  [--no-cursor-agents] [--no-hermes-personalities] [--help]
+                  [--no-cursor-agents] [--no-hermes-personalities] [--no-cai]
+                  [--help]
 
   --dry-run                  Print the changes that would be made and change nothing.
   --force                    Replace an existing symlink that points somewhere else, or a
@@ -115,6 +124,7 @@ Usage: install.sh [--dry-run] [--force] [--no-statusline]
   --no-codex-agents          Skip linking the generated Codex agents.
   --no-cursor-agents         Skip linking the generated Cursor agents.
   --no-hermes-personalities  Skip setting the generated Hermes personalities.
+  --no-cai                   Skip exposing a clone outside ~/.agents to CAI.
   --help                     Show this message.
 USAGE
 }
@@ -129,6 +139,7 @@ while [ "$#" -gt 0 ]; do
         --no-codex-agents) no_codex_agents=1 ;;
         --no-cursor-agents) no_cursor_agents=1 ;;
         --no-hermes-personalities) no_hermes_personalities=1 ;;
+        --no-cai) no_cai=1 ;;
         -h | --help)
             usage
             exit 0
@@ -379,6 +390,28 @@ echo "Global instruction file:"
 for target in "${instruction_targets[@]}"; do
     link_one "$agents_file" "$target"
 done
+
+# CAI discovers ~/.agents only, so a clone elsewhere is linked there; see the
+# header. CAI's configuration directory follows CAI's own rule: a non-empty
+# XDG_CONFIG_HOME, else ~/.config.
+agents_home="${HOME}/.agents"
+cai_config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/cai"
+echo "CAI:"
+if [ "$no_cai" -eq 1 ]; then
+    echo "  skipped (--no-cai)."
+elif [ "$(readlink -f "$agents_home" 2>/dev/null || true)" = "$(readlink -f "$repo_root")" ]; then
+    echo "  ok: CAI reads this clone at ${agents_home} directly"
+elif [ ! -d "$cai_config_dir" ]; then
+    echo "  skip: CAI configuration not found at ${cai_config_dir}"
+elif { [ -e "$agents_home" ] || [ -L "$agents_home" ]; } && [ ! -d "$agents_home" ]; then
+    echo "  skip: ${agents_home} exists and is not a directory" >&2
+else
+    link_one "$agents_file" "${agents_home}/AGENTS.md"
+    link_skills "${agents_home}/skills"
+    if [ -d "$agent_sources_dir" ]; then
+        link_one "$agent_sources_dir" "${agents_home}/agent_sources"
+    fi
+fi
 
 if [ "$no_statusline" -eq 1 ]; then
     echo "Status line: skipped (--no-statusline)."

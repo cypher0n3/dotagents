@@ -11,7 +11,7 @@ import json
 import re
 
 from agent_front_matter import AMBIGUOUS_WORDS, SourceError
-from agent_source import Agent
+from agent_source import SKILLS_HEADING, Agent
 
 # What each tier means for each tool. A tool with no entry for a tier uses its
 # session's model. Hermes personalities cannot set a model, and CAI resolves
@@ -30,8 +30,8 @@ GENERATED_HEADER = (
     "do not edit, changes are lost at the next generation."
 )
 
-# The body section added for tools that cannot preload skills.
-SKILLS_HEADING = "## Skill Dependencies"
+# The body section added for tools that cannot preload skills, under
+# SKILLS_HEADING, which load_agent keeps out of every source body.
 REQUIRED_SKILLS_INTRO = "This tool does not preload skills, so load each of these before starting work:"
 SUGGESTED_SKILLS_INTRO = "Load each of these when the task makes it relevant:"
 

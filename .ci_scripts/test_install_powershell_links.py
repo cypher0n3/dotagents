@@ -29,7 +29,9 @@ class PowerShellLinksTest(PowerShellTestCase):
                 self.assertEqual(sorted(p.name for p in (self.home / target).iterdir()), expected)
                 for name in expected:
                     self.assertEqual((self.home / target / name).read_bytes(), (REPO / source / name).read_bytes())
-        self.assertNotIn("CAI", result.stdout)
+        # Without a CAI configuration, nothing is written for CAI.
+        self.assertIn("skip: CAI configuration not found", result.stdout)
+        self.assertFalse((self.home / ".agents").exists())
 
     def test_symbolic_links_are_used_when_available(self):
         if os.name == "nt":

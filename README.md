@@ -62,7 +62,7 @@ Enable Actions on the fork so a daily workflow can merge `main` from here; see [
 I keep the clone at `~/.agents`, and the documentation assumes that path.
 For link-based consumers, `just install` resolves the repository root at run time and points every link at wherever the clone actually lives.
 If you move or re-clone it, run `just install --force` to repoint the links, because an existing link that points somewhere else is skipped rather than replaced.
-CAI is different: its automatic global shared-skill discovery uses `~/.agents/skills/`, and this installer does not redirect CAI to a clone elsewhere.
+CAI is different: it discovers `~/.agents` only, so for a clone elsewhere `just install` links the clone's instructions, skills, and agents into `~/.agents` when CAI is installed; see [CAI](#cai).
 
 On Unix, skill content stays in this clone.
 `just install` creates symlinks for the other tools and registers the skills directory with Hermes, so edits stay shared rather than leaving stale copies behind.
@@ -105,6 +105,8 @@ Use `just --list` to see every recipe.
   Migration does not move out anything a tool already wrote through the old link, so every `skills/` directory without a `SKILL.md` is reported for you to remove.
 - Instruction-file links, one symlink pointing at `AGENTS.md`: `~/.claude/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.cursor/rules/AGENTS.md`, `~/.gemini/GEMINI.md`, and `~/.grok/AGENTS.md`.
   The Gemini link uses that tool's own filename, which is what it reads by default.
+
+For CAI, a clone outside `~/.agents` also gets `~/.agents/AGENTS.md`, per-skill links in `~/.agents/skills`, and a link from `~/.agents/agent_sources` to the whole `agent_sources/` directory; see [CAI](#cai).
 
 It also installs the Claude Code and Cursor status lines: `~/.claude/statusline-command.sh` is linked to [claude/statusline-command.sh](claude/statusline-command.sh), `~/.cursor/statusline-command.sh` is linked to [cursor/statusline-command.sh](cursor/statusline-command.sh), and each tool's settings file is pointed at its script, with the existing file backed up alongside first and every other setting left untouched.
 Pass `--no-statusline` (`just install --no-statusline`) to skip that step entirely.
@@ -164,9 +166,19 @@ See the [Hermes skills documentation](https://hermes-agent.nousresearch.com/docs
 
 ### CAI
 
-CAI (Cypher's Agent Interface) discovers `~/.agents/skills/` directly, with no installer link, package copy, or YAML setting required for a clone at `~/.agents`.
-Neither installer changes CAI configuration, instructions, personas, or native skills.
-This integration targets CAI's Linux/XDG layout; it does not imply native Windows support.
+CAI (Cypher's Agent Interface) reads `~/.agents` directly: `AGENTS.md` and `AGENTS.override.md` as global instructions, `skills/` as shared skills, and, once CAI ships it, `agent_sources/` as personas.
+A clone at `~/.agents` needs no installer link, package copy, or YAML setting.
+
+CAI does not look anywhere else, so for a clone elsewhere the installers expose it at `~/.agents` when CAI's configuration directory exists (`$XDG_CONFIG_HOME/cai`, or `~/.config/cai` when that variable is empty):
+
+- `AGENTS.md` and each skill are linked into `~/.agents` one at a time, like every other tool's links, so anything else there is left alone.
+- `agent_sources/` is linked as a whole, so an agent added to the clone appears without reinstalling, and a model CAI saves with `/model` is written into the clone.
+- `AGENTS.override.md` holds this repository's own rules and is never linked.
+- An existing entry that points elsewhere is replaced only with `--force`, and `--no-cai` skips the step.
+
+CAI follows these links: it reads an instruction file or skill package through a symbolic link when the target is a regular file or directory.
+Neither installer changes CAI configuration, personas, or native skills.
+This integration targets CAI's Linux/XDG layout; it does not imply native Windows support, and the Windows installer only acts where a CAI configuration already exists.
 
 For a single project, skill-name precedence is:
 
@@ -201,11 +213,10 @@ $code-review-precision Review the current diff without changing files.
 
 Current compatibility boundaries are deliberate:
 
-- The tracked regular skill packages match CAI's package layout; symlinked child packages such as locally linked system skills are skipped by its scanner.
-- CAI does not automatically read `~/.agents/AGENTS.md` as global instructions and rejects symlinked instruction files.
-  The shared repository's `AGENTS.override.md` is repository-specific, not a global instruction source.
-- CAI is meant to read the agents in `~/.agents/agent_sources/` directly, as it reads `~/.agents/skills/`, so nothing is generated or installed for it; see [CAI Native Agent Sources](docs/draft_specs/cai-native-agent-sources.md) for the CAI change this needs.
-  Until CAI ships it, CAI does not see these agents.
+- The tracked skill packages match CAI's package layout.
+- With the clone at `~/.agents`, CAI also loads this repository's `AGENTS.override.md` as a global override, although its rules are repository-specific; a clone elsewhere avoids that, because the override is never linked.
+- CAI reads the agents in `~/.agents/agent_sources/` directly, as specified in [Shared Agent Templates](docs/specs/shared-agent-templates.md#cai), so nothing is generated for it.
+  Until CAI ships that, CAI does not see these agents.
 - CAI does not enforce `user-invocable` or `disable-model-invocation` as activation policy, and `allowed-tools` declarations do not grant or restrict authority.
   Skill prose does not replace host-side approvals or sandbox policy.
 - [`detailed-execution-planner`](skills/detailed-execution-planner/SKILL.md) selects a native CAI planning workflow separately from Cursor's plan format.

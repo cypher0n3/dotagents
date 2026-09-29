@@ -127,8 +127,9 @@ class InstallLinksTest(LinkTestCase):
                 self.assertEqual(sorted(p.name for p in directory.iterdir()), [name])
                 self.assertTrue((directory / name).is_symlink())
                 self.assertEqual((directory / name).resolve(), (self.repo / source / name).resolve())
+        # Without a CAI configuration, nothing is written for CAI.
         self.assertFalse((self.home / ".config").exists())
-        self.assertNotIn("CAI", result.stdout)
+        self.assertFalse((self.home / ".agents").exists())
 
     def test_regeneration_keeps_links_current_and_drops_removed_agents(self) -> None:
         self.install()

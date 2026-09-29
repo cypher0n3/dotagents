@@ -76,6 +76,7 @@ cd ~/.agents
 # -NoCodexAgents         Skip installing the generated Codex agents
 # -NoCursorAgents        Skip installing the generated Cursor agents
 # -NoHermesPersonalities Skip setting the generated Hermes personalities
+# -NoCai                 Skip exposing a clone outside ~/.agents to CAI
 # -DryRun                Show what would happen without making changes
 ```
 

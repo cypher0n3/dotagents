@@ -66,6 +66,7 @@ class ValidationTest(TreeTestCase):
         cases = (
             ("No heading\n", "must open with an H1"),
             ("# T\n\n", "exactly one newline"),
+            ("# T\n\n## Skill Dependencies\n\nMine.\n", "generator adds that section"),
         )
         for body, fragment in cases:
             with self.subTest(fragment=fragment):
@@ -90,6 +91,21 @@ class ValidationTest(TreeTestCase):
         with self.assertRaises(SourceError) as caught:
             load_agents(self.root)
         self.assertEqual(len(str(caught.exception).splitlines()), 2)
+
+    def test_skill_dependencies_heading_fails_without_skills_in_every_file(self) -> None:
+        # The heading is rejected even for an agent with no skills, and every
+        # offending file is reported, not just the first.
+        body = BODY + "\n## Skill Dependencies\n\nMine.\n"
+        without_skills = SOURCE.replace(BODY, body)
+        for key in ("skills:\n  - alpha\n", "suggested_skills:\n  - beta\n"):
+            without_skills = without_skills.replace(key, "")
+        self.write(without_skills.replace("name: sample", "name: one"), "one")
+        self.write(without_skills.replace("name: sample", "name: two"), "two")
+        with self.assertRaises(SourceError) as caught:
+            load_agents(self.root)
+        problems = str(caught.exception).splitlines()
+        self.assertEqual(len(problems), 2)
+        self.assertTrue(all("Skill Dependencies" in problem for problem in problems), problems)
 
 
 if __name__ == "__main__":

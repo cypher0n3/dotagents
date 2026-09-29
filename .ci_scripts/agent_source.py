@@ -100,6 +100,11 @@ NAME_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 MAX_NAME_LENGTH = 64
 MAX_DESCRIPTION_LENGTH = 1024
 
+# The body section the generator adds for tools that cannot preload skills. A
+# source must not write it, whether or not the agent has skills today, so
+# adding a skill later never turns a valid source into an invalid one.
+SKILLS_HEADING = "## Skill Dependencies"
+
 REQUIRED_KEYS = ("schema", "name", "description")
 TOP_LEVEL_KEYS = (
     "schema",
@@ -214,6 +219,8 @@ def _check_body(body: str, where: str) -> None:
         raise SourceError(f"{where}: body must open with an H1 heading")
     if not body.endswith("\n") or body.endswith("\n\n"):
         raise SourceError(f"{where}: body must end with exactly one newline")
+    if any(line.strip() == SKILLS_HEADING for line in body.split("\n")):
+        raise SourceError(f"{where}: body must not have a '{SKILLS_HEADING}' heading; the generator adds that section")
 
 
 def _read_model(value: object, where: str) -> tuple[str | None, dict[str, object]]:

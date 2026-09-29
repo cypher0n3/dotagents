@@ -12,7 +12,8 @@
 
       - Directory targets use a junction (mklink /J equivalent). Junctions need
         no elevation and can point across local volumes, so editing a file in
-        this clone still changes what every tool reads.
+        this clone still changes what every tool reads. PowerShell on other
+        systems has no junctions, so there they use a symbolic link.
       - Skills get one junction per skill inside a real directory each tool
         owns, so a skill a tool writes there itself never lands in this clone.
         An older install that linked skills/ as a whole is migrated to a real
@@ -46,7 +47,16 @@
     ~/.claude/agents, ~/.codex/agents, and ~/.cursor/agents. Each generated
     Hermes personality is set in Hermes config through its CLI; one this
     installer did not set, or one changed since, is replaced only with -Force.
-    CAI reads agent_sources/ itself, so nothing is installed for it.
+
+    CAI reads ~/.agents itself: AGENTS.md as global instructions, skills/, and
+    agent_sources/. A clone at ~/.agents needs nothing. For a clone anywhere
+    else, when CAI's configuration folder exists, the installer links
+    AGENTS.md and each skill into ~/.agents one at a time, and agent_sources/
+    as a whole, so an agent added to the clone appears without reinstalling
+    and a model CAI saves with /model is written into the clone.
+    AGENTS.override.md holds this repository's own rules and is never linked.
+    This does not claim that CAI supports Windows; the step only acts where a
+    CAI configuration already exists.
 
     An existing real file or directory that this repository did not create is
     never overwritten unless -Force is given.
@@ -81,6 +91,9 @@
 .PARAMETER NoHermesPersonalities
     Skip setting the generated Hermes personalities.
 
+.PARAMETER NoCai
+    Skip exposing a clone outside ~/.agents to CAI.
+
 .EXAMPLE
     .\scripts\install.ps1 -DryRun
 
@@ -98,7 +111,8 @@ param(
     [switch]$NoHermes,
     [switch]$NoCodexAgents,
     [switch]$NoCursorAgents,
-    [switch]$NoHermesPersonalities
+    [switch]$NoHermesPersonalities,
+    [switch]$NoCai
 )
 
 Set-StrictMode -Version Latest
@@ -171,7 +185,8 @@ function Ensure-Parent {
 }
 
 # Install-DirLink <source-dir> <link-path>
-# Point link-path at source-dir with a directory junction.
+# Point link-path at source-dir with a directory junction on Windows, or a
+# symbolic link elsewhere, where PowerShell cannot create junctions.
 function Install-DirLink {
     param(
         [Parameter(Mandatory)][string]$Source,
@@ -205,11 +220,13 @@ function Install-DirLink {
     }
 
     Ensure-Parent $link
+    $kind = if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }
+    $label = if ($IsWindows) { 'junction' } else { 'linked' }
     if ($DryRun) {
-        Write-Detail "would junction: $link -> $source"
+        Write-Detail "would ${label}: $link -> $source"
     } else {
-        New-Item -ItemType Junction -Path $link -Target $source | Out-Null
-        Write-Detail "junction: $link -> $source"
+        New-Item -ItemType $kind -Path $link -Target $source | Out-Null
+        Write-Detail "${label}: $link -> $source"
     }
 }
 
@@ -875,20 +892,26 @@ $script:canSymlink = $null
 Write-Host "Source: $skillsDir"
 if ($DryRun) { Write-Host '(dry run: nothing will be changed)' }
 
+# Link each skill into a real directory the tool owns, one directory at a time.
+function Install-SkillLinks {
+    param([Parameter(Mandatory)][string]$TargetDir)
+    $state = Prepare-RealDir $TargetDir $skillsDir
+    if ($state -eq 'skip') { return }
+    if ($state -eq 'dry-migrate') {
+        Write-Detail "would link each skill into $TargetDir"
+        return
+    }
+    foreach ($skill in $skillDirs) {
+        Install-DirLink $skill.FullName "$TargetDir/$($skill.Name)"
+    }
+    Report-StaleSkills $TargetDir
+}
+
 Write-Step 'Skill targets:'
 $skillDirs = Get-ChildItem -LiteralPath $skillsDir -Directory |
     Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'SKILL.md') -PathType Leaf }
 foreach ($target in $perSkillTargets) {
-    $state = Prepare-RealDir $target $skillsDir
-    if ($state -eq 'skip') { continue }
-    if ($state -eq 'dry-migrate') {
-        Write-Detail "would link each skill into $target"
-        continue
-    }
-    foreach ($skill in $skillDirs) {
-        Install-DirLink $skill.FullName "$target/$($skill.Name)"
-    }
-    Report-StaleSkills $target
+    Install-SkillLinks $target
 }
 # A tool that wrote through a whole-directory link from an older install
 # leaves its content in skills/; report it rather than removing it.
@@ -975,6 +998,37 @@ foreach ($generated in $generatedTargets) {
 Write-Step 'Global instruction file:'
 foreach ($target in $instructionTargets) {
     Install-FileLink $agentsFile $target
+}
+
+# CAI discovers ~/.agents only, so a clone elsewhere is linked there; see the
+# help text. CAI's configuration folder follows CAI's own rule: a non-empty
+# XDG_CONFIG_HOME, else ~/.config.
+$agentsHome = Expand-Home '~/.agents'
+$caiConfigDir = if (-not [string]::IsNullOrEmpty($env:XDG_CONFIG_HOME)) {
+    Join-Path $env:XDG_CONFIG_HOME 'cai'
+} else {
+    Expand-Home '~/.config/cai'
+}
+$agentsHomeItem = if (Test-Path -LiteralPath $agentsHome) { Get-Item -LiteralPath $agentsHome -Force } else { $null }
+$agentsHomeTarget = if ($agentsHomeItem) { Get-LinkTarget $agentsHomeItem } else { $null }
+$cloneAtAgentsHome = $agentsHomeItem -and (
+    ((Resolve-Full $agentsHome) -ieq (Resolve-Full $repoRoot)) -or
+    ($agentsHomeTarget -and ($agentsHomeTarget -ieq (Resolve-Full $repoRoot))))
+Write-Step 'CAI:'
+if ($NoCai) {
+    Write-Detail 'skipped (-NoCai).'
+} elseif ($cloneAtAgentsHome) {
+    Write-Detail "ok: CAI reads this clone at $agentsHome directly"
+} elseif (-not (Test-Path -LiteralPath $caiConfigDir -PathType Container)) {
+    Write-Detail "skip: CAI configuration not found at $caiConfigDir"
+} elseif ($agentsHomeItem -and -not $agentsHomeItem.PSIsContainer) {
+    Write-Detail "skip: $agentsHome exists and is not a directory"
+} else {
+    Install-FileLink $agentsFile '~/.agents/AGENTS.md'
+    Install-SkillLinks '~/.agents/skills'
+    if (Test-Path -LiteralPath $agentSourcesDir -PathType Container) {
+        Install-DirLink $agentSourcesDir '~/.agents/agent_sources'
+    }
 }
 
 if ($NoStatusline) {
