@@ -47,7 +47,8 @@ Before opening a request that adds a skill:
 
 ## New Agents
 
-An agent under `agents/` is held to the same vetting as a skill, and to one more test: it must preload existing skills rather than restate them.
+An agent is held to the same vetting as a skill, and to one more test: it must preload existing skills rather than restate them.
+Each agent is one file under [`agent_sources/`](agent_sources/README.md); change only that file, because every tool's version is generated from it and never committed.
 If the rule you want the agent to follow is not in a skill, add or extend the skill first and have the agent preload it, so the rule is written once and every tool that reads the skill sees it.
 Read [Agent Authoring Standards](docs/docs_standards/agent_authoring.md) before opening the request, and say which model you chose and why.
 
@@ -60,10 +61,10 @@ just setup
 just ci
 ```
 
-That runs Markdown lint, internal link validation, skill frontmatter and manifest validation, agent frontmatter and index validation, the offline unit tests, and shell lint.
+That generates the agents from `agent_sources/`, then runs Markdown lint, internal link validation, skill frontmatter and manifest validation, agent frontmatter and index validation, Python lint, the offline unit tests, and shell lint.
 See [`.ci_scripts/README.md`](.ci_scripts/README.md) for what each validator checks.
 
-Do not modify [`.markdownlint.yml`](.markdownlint.yml) or [`.markdownlint-cli2.jsonc`](.markdownlint-cli2.jsonc), and do not add lint suppressions, to make a check pass.
+Do not modify [`.markdownlint.yml`](.markdownlint.yml), [`.markdownlint-cli2.jsonc`](.markdownlint-cli2.jsonc), [`.flake8`](.flake8), [`.pylintrc`](.pylintrc), or [`bandit.yaml`](bandit.yaml), and do not add lint suppressions, to make a check pass.
 If a rule is genuinely wrong for a case, raise that as its own discussion.
 
 ## Reporting a Problem
@@ -76,7 +77,7 @@ Include the agent tool and version when the behavior is tool-specific, because t
 This repository uses a split license, and [LICENSE](LICENSE) is the authoritative statement of it.
 
 - Scripts, just recipes, CI helpers, and linter configuration are licensed under the **MIT License**.
-- The skill definitions under `skills/`, their reference files and agent manifests, the agent definitions under `agents/`, and the project documentation are licensed under the **Creative Commons Attribution 4.0 International Public License (CC BY 4.0)**.
+- The skill definitions under `skills/`, their reference files and agent manifests, the agent definitions under `agent_sources/` and the agent files generated from them, and the project documentation are licensed under the **Creative Commons Attribution 4.0 International Public License (CC BY 4.0)**.
 
 Skill files carry no per-file license notice, because everything in a `SKILL.md` is loaded into the model's context on every invocation and a notice there would cost context without doing any work.
 The license travels with the repository, not with the individual file, so anyone copying a skill out is responsible for carrying the attribution with it.

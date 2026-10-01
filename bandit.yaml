@@ -1,0 +1,8 @@
+# Bandit skips: justified for the CI helpers and installer tests in .ci_scripts/.
+# Add a comment here when adding a new skip.
+#
+# AI Agents: You are NOT ALLOWED to modify this file.
+skips:
+  - B404  # subprocess import: the helpers and installer tests run git, bash, pwsh, and skills-ref.
+  - B603  # subprocess without shell: every call passes list arguments to a known binary.
+  - B607  # partial executable path: tools are invoked by name; PATH is under the developer's control.

@@ -65,7 +65,7 @@ def collect_anchors(path: Path) -> set[str]:
             continue
         count = seen.get(slug, 0)
         seen[slug] = count + 1
-        anchors.add(slug if count == 0 else f"{slug}-{count}")
+        anchors.add(f"{slug}-{count}" if count else slug)
     return anchors
 
 

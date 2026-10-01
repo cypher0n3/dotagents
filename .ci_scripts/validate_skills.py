@@ -85,7 +85,7 @@ def split_frontmatter(text: str) -> tuple[list[str], list[str]] | None:
         return None
     for index in range(1, len(lines)):
         if lines[index].strip() == FRONTMATTER_DELIMITER:
-            return lines[1:index], lines[index + 1 :]
+            return lines[1:index], lines[index + 1:]
     return None
 
 
@@ -161,26 +161,8 @@ def validate_manifest(manifest_path: Path, location: str, report: Report) -> Non
             report.error(location, f"agent manifest is missing required key '{key}'")
 
 
-def validate_skill(skill_dir: Path, report: Report) -> None:
-    """Validate one skill directory and record findings on the report."""
-    skill_file = skill_dir / SKILL_FILENAME
-    location = str(skill_file)
-    if not skill_file.is_file():
-        report.error(str(skill_dir), f"missing {SKILL_FILENAME}")
-        return
-
-    parsed = split_frontmatter(skill_file.read_text(encoding="utf-8"))
-    if parsed is None:
-        report.error(location, "missing or unterminated YAML frontmatter")
-        return
-    frontmatter_lines, body_lines = parsed
-    frontmatter = parse_frontmatter(frontmatter_lines)
-
-    for key in REQUIRED_KEYS:
-        if not frontmatter.get(key):
-            report.error(location, f"frontmatter is missing required key '{key}'")
-
-    name = frontmatter.get("name", "")
+def validate_name(name: str, skill_dir: Path, location: str, report: Report) -> None:
+    """Report a name that does not match its directory, is not kebab-case, or is too long."""
     if name and name != skill_dir.name:
         report.error(location, f"frontmatter name '{name}' does not match directory '{skill_dir.name}'")
     if name and not NAME_PATTERN.match(name):
@@ -192,19 +174,18 @@ def validate_skill(skill_dir: Path, report: Report) -> None:
     if len(name) > MAX_NAME_LENGTH:
         report.error(location, f"name is {len(name)} characters; the limit is {MAX_NAME_LENGTH}")
 
-    description = frontmatter.get("description", "")
-    if len(description) > MAX_DESCRIPTION_LENGTH:
-        report.error(
-            location,
-            f"description is {len(description)} characters; the limit is {MAX_DESCRIPTION_LENGTH}",
-        )
 
-    compatibility = frontmatter.get("compatibility", "")
-    if len(compatibility) > MAX_COMPATIBILITY_LENGTH:
-        report.error(
-            location,
-            f"compatibility is {len(compatibility)} characters; the limit is {MAX_COMPATIBILITY_LENGTH}",
-        )
+def validate_frontmatter(frontmatter: dict, skill_dir: Path, location: str, report: Report) -> None:
+    """Check required keys, the name, length limits, boolean values, and unknown keys."""
+    for key in REQUIRED_KEYS:
+        if not frontmatter.get(key):
+            report.error(location, f"frontmatter is missing required key '{key}'")
+    validate_name(frontmatter.get("name", ""), skill_dir, location, report)
+
+    for key, limit in (("description", MAX_DESCRIPTION_LENGTH), ("compatibility", MAX_COMPATIBILITY_LENGTH)):
+        length = len(frontmatter.get(key, ""))
+        if length > limit:
+            report.error(location, f"{key} is {length} characters; the limit is {limit}")
 
     for key in BOOLEAN_KEYS:
         value = frontmatter.get(key)
@@ -215,6 +196,9 @@ def validate_skill(skill_dir: Path, report: Report) -> None:
         if key not in KNOWN_KEYS:
             report.warn(location, f"unrecognized frontmatter key '{key}'")
 
+
+def validate_body(body_lines: list[str], location: str, report: Report) -> None:
+    """Check the body's heading, its size against the specification, and HTML comments."""
     heading = first_body_heading(body_lines)
     if not heading.startswith("# "):
         report.error(location, "body must open with a single H1 heading")
@@ -240,6 +224,25 @@ def validate_skill(skill_dir: Path, report: Report) -> None:
             f"HTML comment on body line {number}; a SKILL.md is loaded as raw text, "
             "so notes belong in references/ or docs/ instead",
         )
+
+
+def validate_skill(skill_dir: Path, report: Report) -> None:
+    """Validate one skill directory and record findings on the report."""
+    skill_file = skill_dir / SKILL_FILENAME
+    location = str(skill_file)
+    if not skill_file.is_file():
+        report.error(str(skill_dir), f"missing {SKILL_FILENAME}")
+        return
+
+    parsed = split_frontmatter(skill_file.read_text(encoding="utf-8"))
+    if parsed is None:
+        report.error(location, "missing or unterminated YAML frontmatter")
+        return
+    frontmatter_lines, body_lines = parsed
+    frontmatter = parse_frontmatter(frontmatter_lines)
+
+    validate_frontmatter(frontmatter, skill_dir, location, report)
+    validate_body(body_lines, location, report)
 
     manifest_path = skill_dir / AGENT_MANIFEST
     if manifest_path.is_file():

@@ -156,7 +156,8 @@ class ValidateAgentsTest(unittest.TestCase):
         text = VALID_AGENT.replace("tools: Read, Grep, Bash", "tools: Agent(worker, helper), Read")
         report = self.validate("sample-agent.md", text)
         self.assertEqual(report.errors, [])
-        self.assertEqual(validate_agents.parse_tool_list("Agent(worker, helper), Read"), ["Agent(worker, helper)", "Read"])
+        tools = validate_agents.parse_tool_list("Agent(worker, helper), Read")
+        self.assertEqual(tools, ["Agent(worker, helper)", "Read"])
 
     def test_missing_preloaded_skill_is_an_error(self) -> None:
         report = self.validate("sample-agent.md", VALID_AGENT.replace("- sample-skill", "- no-such-skill"))
@@ -171,14 +172,16 @@ class ValidateAgentsTest(unittest.TestCase):
     def test_hooks_block_is_recognized(self) -> None:
         text = VALID_AGENT.replace(
             "model: sonnet\n",
-            "model: sonnet\nhooks:\n  PostToolUse:\n    - matcher: Edit\n      hooks:\n        - type: command\n          command: ./lint.sh\n",
+            "model: sonnet\nhooks:\n  PostToolUse:\n    - matcher: Edit\n"
+            "      hooks:\n        - type: command\n          command: ./lint.sh\n",
         )
         report = self.validate("sample-agent.md", text)
         self.assertEqual(report.errors, [])
         self.assertEqual(report.warnings, [])
 
     def test_unknown_key_is_a_warning(self) -> None:
-        report = self.validate("sample-agent.md", VALID_AGENT.replace("model: sonnet\n", "model: sonnet\ncolour: red\n"))
+        text = VALID_AGENT.replace("model: sonnet\n", "model: sonnet\ncolour: red\n")
+        report = self.validate("sample-agent.md", text)
         self.assertEqual(report.errors, [])
         self.assertTrue(any("unrecognized frontmatter key 'colour'" in warning for warning in report.warnings))
 
@@ -198,14 +201,15 @@ class ValidateAgentsTest(unittest.TestCase):
     def test_index_must_link_every_agent(self) -> None:
         (self.agents / "sample-agent.md").write_text(VALID_AGENT, encoding="utf-8")
         report = validate_agents.Report()
-        validate_agents.validate_index(self.agents, ["sample-agent", "unlisted"], report)
+        validate_agents.validate_index(self.agents / "README.md", ["sample-agent", "unlisted"], report)
         self.assertEqual(len(report.errors), 1)
         self.assertIn("'unlisted' is not linked", report.errors[0])
 
     def test_main_validates_a_whole_tree(self) -> None:
         (self.agents / "sample-agent.md").write_text(VALID_AGENT, encoding="utf-8")
         self.assertEqual(validate_agents.main([str(self.agents), str(self.skills)]), 0)
-        (self.agents / "sample-agent.md").write_text(VALID_AGENT.replace("model: sonnet", "model: bogus"), encoding="utf-8")
+        invalid = VALID_AGENT.replace("model: sonnet", "model: bogus")
+        (self.agents / "sample-agent.md").write_text(invalid, encoding="utf-8")
         self.assertEqual(validate_agents.main([str(self.agents), str(self.skills)]), 1)
 
     def test_main_rejects_missing_roots(self) -> None:
