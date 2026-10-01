@@ -91,8 +91,10 @@
 .PARAMETER NoHermesPersonalities
     Skip setting the generated Hermes personalities.
 
-.PARAMETER NoCai
-    Skip exposing a clone outside ~/.agents to CAI.
+Skip exposing a clone outside ~/.agents to CAI.
+
+.PARAMETER NoPi
+    Skip installing links for Pi (pi.dev).
 
 .EXAMPLE
     .\scripts\install.ps1 -DryRun
@@ -112,7 +114,8 @@ param(
     [switch]$NoCodexAgents,
     [switch]$NoCursorAgents,
     [switch]$NoHermesPersonalities,
-    [switch]$NoCai
+    [switch]$NoCai,
+    [switch]$NoPi
 )
 
 Set-StrictMode -Version Latest
@@ -873,6 +876,8 @@ $perSkillTargets = @(
     '~/.codex/skills'
     '~/.grok/skills'
 )
+# Pi target is conditionally prepended below when -NoPi is not passed.
+$script:piPerSkillTarget = '~/.pi/agent/skills'
 
 # Instruction-file targets: one file link to AGENTS.md each.
 $instructionTargets = @(
@@ -882,6 +887,14 @@ $instructionTargets = @(
     '~/.gemini/GEMINI.md'
     '~/.grok/AGENTS.md'
 )
+# Pi target is conditionally prepended below when -NoPi is not passed.
+$script:piInstructionTarget = '~/.pi/agent/AGENTS.md'
+
+# Conditionally prepend Pi targets so the existing loops pick them up.
+if (-not $NoPi) {
+    $perSkillTargets = @($script:piPerSkillTarget) + $perSkillTargets
+    $instructionTargets = @($script:piInstructionTarget) + $instructionTargets
+}
 
 # --- run -------------------------------------------------------------------
 

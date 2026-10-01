@@ -13,6 +13,8 @@
 # The last two steps can be skipped with --no-statusline and --no-attribution.
 # Existing Hermes setups scan skills/ via skills.external_dirs; --no-hermes
 # skips registration without replacing Hermes-owned skills or identity.
+# Pi discovers skills from ~/.pi/agent/skills/ and reads ~/.pi/agent/AGENTS.md
+# as a user-level instruction file; --no-pi skips both Pi steps.
 #
 # The generated Codex and Cursor agents are installed the same way as the
 # Claude agents: one symlink per file in generated/codex/agents and
@@ -80,6 +82,7 @@ no_codex_agents=0
 no_cursor_agents=0
 no_hermes_personalities=0
 no_cai=0
+no_pi=0
 
 # Targets that receive one symlink per agent file. Only Claude Code reads this
 # file format today, so only its agents directory is linked.
@@ -96,6 +99,8 @@ per_skill_targets=(
     "${HOME}/.codex/skills"
     "${HOME}/.grok/skills"
 )
+# Pi targets are conditionally prepended below when --no-pi is not passed.
+per_skill_pi_target="${HOME}/.pi/agent/skills"
 
 # Targets that receive a symlink to the global AGENTS.md instruction file.
 # Each entry is the path that tool reads for user-level instructions. The Gemini
@@ -107,13 +112,15 @@ instruction_targets=(
     "${HOME}/.gemini/GEMINI.md"
     "${HOME}/.grok/AGENTS.md"
 )
+# Pi targets are conditionally prepended below when --no-pi is not passed.
+instruction_pi_target="${HOME}/.pi/agent/AGENTS.md"
 
 usage() {
     cat <<'USAGE'
 Usage: install.sh [--dry-run] [--force] [--no-statusline]
                   [--no-attribution] [--no-hermes] [--no-codex-agents]
                   [--no-cursor-agents] [--no-hermes-personalities] [--no-cai]
-                  [--help]
+                  [--no-pi] [--help]
 
   --dry-run                  Print the changes that would be made and change nothing.
   --force                    Replace an existing symlink that points somewhere else, or a
@@ -125,6 +132,7 @@ Usage: install.sh [--dry-run] [--force] [--no-statusline]
   --no-cursor-agents         Skip linking the generated Cursor agents.
   --no-hermes-personalities  Skip setting the generated Hermes personalities.
   --no-cai                   Skip exposing a clone outside ~/.agents to CAI.
+  --no-pi                    Skip installing links for Pi (pi.dev).
   --help                     Show this message.
 USAGE
 }
@@ -144,6 +152,7 @@ while [ "$#" -gt 0 ]; do
             usage
             exit 0
             ;;
+        --no-pi) no_pi=1 ;;
         *)
             echo "error: unknown argument '$1'" >&2
             usage >&2
@@ -152,6 +161,12 @@ while [ "$#" -gt 0 ]; do
     esac
     shift
 done
+
+# Conditionally prepend Pi targets so the existing loops pick them up.
+if [ "$no_pi" -eq 0 ]; then
+    per_skill_targets=("${per_skill_pi_target}" "${per_skill_targets[@]}")
+    instruction_targets=("${instruction_pi_target}" "${instruction_targets[@]}")
+fi
 
 run() {
     if [ "$dry_run" -eq 1 ]; then

@@ -231,7 +231,8 @@ A new tool is added in one reviewed change, with no change to any agent file:
 4. Updates to the README and this specification.
 
 A tool with no native agent or persona format is not a target, and agents are never written into global instruction files; Hermes is the deliberate exception.
-Gemini, Grok, and GitHub Copilot in VS Code already receive shared skills or instructions and are candidates for later targets.
+Pi discovers `AGENTS.md` as a user-level instruction file and reads skills natively, so it is a target for skills and global instructions but not for agents.
+Gemini, Grok, and GitHub Copilot in VS Code already receive shared skills or instructions and are candidates for later agent targets.
 
 ## Target Evidence
 

@@ -9,7 +9,7 @@
 
 These are my agent skills and instructions, kept in one place and shared across every agent tool I use.
 One directory under [`skills/`](skills/README.md) is one skill.
-Claude Code, Codex, Cursor, Gemini, Grok, and GitHub Copilot in VS Code read that directory through symlinks; Hermes Agent scans it as an external skill directory, and CAI discovers `~/.agents/skills/` natively.
+Claude Code, Codex, Cursor, Gemini, Grok, GitHub Copilot in VS Code, and Pi read that directory through symlinks; Hermes Agent scans it as an external skill directory, and CAI discovers `~/.agents/skills/` natively.
 I edit a skill once and consumers pick it up through their normal reload or session-start behavior.
 One file under [`agent_sources/`](agent_sources/README.md) is one agent that preloads the skills it needs, and is the only place that agent is written.
 `just ci` and `just install` generate it as a Claude Code subagent, a Codex agent, a Cursor agent, and a Hermes personality, each installed the way its tool expects, and CAI reads the file directly.
@@ -99,11 +99,11 @@ Use `just --list` to see every recipe.
   Linking file by file leaves any agent already sitting there untouched, and an older install that linked a whole agent directory is migrated to a real directory the same way skills are.
   Anything in those directories this repository does not provide is reported at the end of the run and never removed, so a renamed agent's dangling link is visible without putting your own agents at risk.
   `--no-codex-agents` and `--no-cursor-agents` skip their step, and a link left by the older `agents/` layout is relinked without `--force`.
-- Per-skill links, one symlink per skill inside a real directory the tool manages itself: `~/.claude/skills`, `~/.cursor/skills`, `~/.gemini/config/skills`, `~/.copilot/skills`, `~/.codex/skills`, and `~/.grok/skills`.
+- Per-skill links, one symlink per skill inside a real directory the tool manages itself: `~/.claude/skills`, `~/.cursor/skills`, `~/.gemini/config/skills`, `~/.copilot/skills`, `~/.codex/skills`, `~/.grok/skills`, and `~/.pi/agent/skills`.
   A tool can write its own skills next to yours (Claude Code syncs vendored ones into `~/.claude/skills`), and a symlink to `skills/` as a whole would land that content in this repository.
   An older install that linked `skills/` as a whole is migrated to a real directory, a `skills/` entry without a `SKILL.md` is never linked, and a link to a skill that no longer exists is reported and left in place.
   Migration does not move out anything a tool already wrote through the old link, so every `skills/` directory without a `SKILL.md` is reported for you to remove.
-- Instruction-file links, one symlink pointing at `AGENTS.md`: `~/.claude/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.cursor/rules/AGENTS.md`, `~/.gemini/GEMINI.md`, and `~/.grok/AGENTS.md`.
+- Instruction-file links, one symlink pointing at `AGENTS.md`: `~/.claude/AGENTS.md`, `~/.codex/AGENTS.md`, `~/.cursor/rules/AGENTS.md`, `~/.gemini/GEMINI.md`, `~/.grok/AGENTS.md`, and `~/.pi/agent/AGENTS.md`.
   The Gemini link uses that tool's own filename, which is what it reads by default.
 
 For CAI, a clone outside `~/.agents` also gets `~/.agents/AGENTS.md`, per-skill links in `~/.agents/skills`, and a link from `~/.agents/agent_sources` to the whole `agent_sources/` directory; see [CAI](#cai).
@@ -118,6 +118,26 @@ Each existing settings file is backed up once per install before its first chang
 
 An existing path is never replaced silently.
 A link that already points here is reported as installed, a link pointing elsewhere is skipped unless `--force` is passed, and a real directory or file in the way is always skipped with a notice.
+
+### Pi
+
+Pi (pi.dev) discovers skills and instruction files natively from a user-configurable agent directory, which defaults to `~/.pi/agent`.
+Skills are any directory containing a `SKILL.md`, and Pi loads their full content into context on demand rather than in one lump.
+Pi also reads `AGENTS.md` from the agent directory or the working directory as global or project-level instruction overrides, and `AGENTS.override.md` replaces `AGENTS.md` when present in the same directory.
+
+`just install` exposes this clone to Pi by linking `AGENTS.md` into `~/.pi/agent/AGENTS.md` and each skill directory into `~/.pi/agent/skills/`, so every skill and instruction is available without manual configuration.
+Skills stay shared through symlinks back into the clone, so edits are picked up on Pi's next `/reload`.
+
+- `~/.pi/agent/AGENTS.md` → `AGENTS.md` (global instructions).
+- `~/.pi/agent/skills/<name>/` → one symlink per `skills/<name>/` per the consumer layout above.
+- `--no-pi` skips both steps; `--force` replaces links that point elsewhere.
+- An `AGENTS.override.md` if present in the working directory is picked up by Pi's own context-file discovery and requires no link.
+
+Pi has no per-tool agent file format or personality system analogous to Claude Code's subagents, Codex's agents, Cursor's personalities, or Hermes's `agent.personalities` entries, so no agents are generated or registered for it.
+Pi's persona system is open-ended and does not share dotagents' preloading contract; a Pi persona that needs the same skills would be written separately in that tool's own format.
+
+Pi does not load `~/.pi/agent/AGENTS.override.md`; it treats that file as the project-level override for the directory where it is found, so this repository's own rules stay with the repository when Pi runs inside or below it.
+This integration does not touch Pi's `models.json`, `mcp.json`, `extensions`, `prompts`, or `themes` configuration.
 
 ### Hermes Agent
 
