@@ -177,20 +177,24 @@ test-python:
     done
     python3 -m unittest "${modules[@]}"
 
-# Run the PowerShell installer tests with the local pwsh. Skipped with a notice when pwsh is absent.
+# Run the PowerShell installer tests with the local pwsh. When pwsh is absent,
+# print that the tests were not run and exit 0. That skip is not a pass;
+# just test-powershell-container is the check that actually runs them.
 test-powershell:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{ root_dir }}"
     if ! command -v pwsh >/dev/null 2>&1; then
-        echo "pwsh not installed; skipping PowerShell installer tests."
-        echo "Run: just test-powershell-container"
+        echo "pwsh not installed; PowerShell installer tests were not run."
+        echo "This skip is not a pass. Run: just test-powershell-container"
         exit 0
     fi
     python=$(command -v python3 || command -v python)
     exec "$python" -m unittest discover --start-directory .ci_scripts --pattern 'test_install_powershell_*.py' -v
 
 # Run the PowerShell installer tests in a PowerShell container (podman, then docker), for machines without pwsh.
+# The installer writes generated/ into the clone, so the host checkout is mounted read-only at /src
+# and copied to a writable /repo before the tests run. Those writes stay in the container.
 test-powershell-container:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -210,10 +214,11 @@ test-powershell-container:
     echo "Running the PowerShell tests in ${image} with ${engine}."
     "$engine" build --quiet --file .ci_scripts/powershell.Containerfile --tag "$image" .ci_scripts
     exec "$engine" run --rm \
-        --volume "{{ root_dir }}:/repo:ro,z" \
+        --volume "{{ root_dir }}:/src:ro,z" \
         --env PYTHONDONTWRITEBYTECODE=1 \
         --env POWERSHELL_TELEMETRY_OPTOUT=1 \
-        "$image" python3 -m unittest discover --start-directory .ci_scripts --pattern 'test_install_powershell_*.py' -v
+        "$image" \
+        bash -c 'set -euo pipefail; cp -a /src/. /repo/; exec python3 -m unittest discover --start-directory .ci_scripts --pattern "test_install_powershell_*.py" -v'
 
 # Lint the repository's shell scripts (shellcheck). Skipped with a notice when shellcheck is absent.
 lint-sh:
