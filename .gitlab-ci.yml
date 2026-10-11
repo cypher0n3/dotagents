@@ -1,10 +1,13 @@
 # Paired with .github/workflows/ci.yml - keep the two in sync when either
-# changes (checks run, container images, trigger scope). Every job calls the
-# justfile recipes that `just ci` runs, in an upstream image pinned to the
-# newest stable release line, as the GitHub jobs do. The PowerShell tests run
+# changes (checks run, container images, trigger scope). Jobs call justfile
+# recipes, in an upstream image pinned to the newest stable release line, as
+# the GitHub jobs do. The read-only PowerShell job is the exception to
+# `just ci`, which skips those tests when pwsh is missing. The PowerShell tests run
 # in the Linux PowerShell image instead of on Windows; Microsoft publishes no
 # image newer than 7.5, and the Windows-only junction test is covered by
-# GitHub.
+# GitHub. check:powershell requires pwsh and runs the tests from a writable
+# copy of a read-only source, the case just test-powershell-container covers.
+# A missing pwsh fails the job.
 
 workflow:
   rules:
@@ -60,4 +63,4 @@ check:powershell:
     - apt-get update && apt-get install -y --no-install-recommends python3 just
   script:
     - pwsh --version
-    - just test-powershell
+    - just test-powershell-readonly

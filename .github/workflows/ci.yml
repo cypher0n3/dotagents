@@ -1,13 +1,17 @@
 # Paired with .gitlab-ci.yml - keep the two in sync when either changes
 # (checks run, container images, trigger scope).
 #
-# Every job calls the justfile recipes that `just ci` runs, so CI and the
-# local gate cannot drift apart. The Linux jobs run in the same upstream
-# images as their GitLab counterparts, pinned to the newest stable release
-# line (Python 3.14 and Node 24 LTS on Debian trixie, ShellCheck 0.11.0),
+# Jobs call justfile recipes so CI and the local gate stay on the same
+# checks. The read-only PowerShell job is the exception: `just ci` skips
+# those tests when pwsh is missing, and this job must not. The Linux jobs
+# run in the same upstream images as their GitLab counterparts, pinned to
+# the newest stable release line (Python 3.14 and Node 24 LTS on Debian
+# trixie, ShellCheck 0.11.0),
 # rather than the older tools the Ubuntu runner ships. The PowerShell
-# installer tests run on a Windows runner, which ships PowerShell 7 and is
-# the only place the junction-migration test can run. Bump the pins, the
+# installer tests run twice: from a read-only source in the Linux PowerShell
+# image, the same image and recipe GitLab uses, and on a Windows runner,
+# which ships PowerShell 7 and is the only place the junction-migration test
+# can run. Either job fails when pwsh is missing. Bump the pins, the
 # markdownlint-cli2 version, and the action majors together when a newer
 # stable release lands.
 
@@ -87,6 +91,19 @@ jobs:
           persist-credentials: false
       - name: Run shellcheck
         run: shellcheck --version && just lint-sh
+
+  powershell-readonly:
+    name: PowerShell installer tests from a read-only source
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/powershell:7.5-ubuntu-24.04
+    steps:
+      - name: Install just, Python, and git
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates git python3 just
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Run PowerShell installer tests
+        run: pwsh --version && just test-powershell-readonly
 
   powershell:
     name: PowerShell installer tests

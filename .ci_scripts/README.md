@@ -45,7 +45,9 @@ Generated-agent tests cover generation at install time, per-file links for Claud
 The Bash tests require Unix Bash; the PowerShell tests require PowerShell 7 (`pwsh`) and report a skip when that runtime is unavailable.
 `just test-powershell` runs them with a local `pwsh` and is part of `just ci`; without `pwsh` it prints a notice and skips.
 `just test-powershell-container` runs them in the pinned PowerShell image from [`powershell.Containerfile`](powershell.Containerfile), using `podman` or `docker`, so a Linux or macOS machine without `pwsh` can still run them.
-GitHub CI runs them on a Windows runner, which also covers the junction-migration test; GitLab CI runs them in the Linux PowerShell image.
+`just test-powershell-readonly` is what CI runs: it requires `pwsh`, copies a read-only source to a writable tree, runs the tests there, and fails when `pwsh` is missing or the tests do not execute.
+GitHub CI runs that recipe in the Linux PowerShell image and still runs `just test-powershell` on a Windows runner, which is what covers the junction-migration test.
+GitLab CI runs the same read-only recipe in that Linux PowerShell image, and fails the job when `pwsh` is not available.
 The junction-migration test only runs on Windows, since junctions do not exist elsewhere; it warns and skips itself on every other system, including inside the container.
 
 ## Python Lint

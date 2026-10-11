@@ -178,8 +178,9 @@ test-python:
     python3 -m unittest "${modules[@]}"
 
 # Run the PowerShell installer tests with the local pwsh. When pwsh is absent,
-# print that the tests were not run and exit 0. That skip is not a pass;
-# just test-powershell-container is the check that actually runs them.
+# print that the tests were not run and exit 0. That skip is not a pass.
+# just test-powershell-container is the local check that actually runs them,
+# and just test-powershell-readonly is the CI check: it fails when pwsh is missing.
 test-powershell:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -219,6 +220,76 @@ test-powershell-container:
         --env POWERSHELL_TELEMETRY_OPTOUT=1 \
         "$image" \
         bash -c 'set -euo pipefail; cp -a /src/. /repo/; exec python3 -m unittest discover --start-directory .ci_scripts --pattern "test_install_powershell_*.py" -v'
+
+# Run the PowerShell installer tests from a writable copy of a read-only source.
+# pwsh is required. A missing pwsh fails the recipe, and so does a run that skips
+# every test. CI calls this so a writable checkout cannot hide the read-only failure
+# that test-powershell-container covers by mounting the source read-only and copying it.
+test-powershell-readonly:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{ root_dir }}"
+    if ! command -v pwsh >/dev/null 2>&1; then
+        echo "Error: pwsh is required. Refusing to skip the PowerShell installer tests." >&2
+        exit 1
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "Error: python3 is required to run the PowerShell installer tests." >&2
+        exit 1
+    fi
+    source_tree=$(mktemp -d)
+    work_tree=$(mktemp -d)
+    tester_home=$(mktemp -d)
+    log=$(mktemp)
+    cleanup() {
+        chmod -R u+w "$source_tree" "$work_tree" "$tester_home" 2>/dev/null || true
+        rm -rf "$source_tree" "$work_tree" "$tester_home" "$log"
+    }
+    trap cleanup EXIT
+    # Root ignores mode bits. CI images run as root, so the tests drop to
+    # nobody before a mode-bit lock counts as a read-only source.
+    as_tester() {
+        if [ "$(id -u)" -eq 0 ]; then
+            command -v su >/dev/null 2>&1 || {
+                echo "Error: root can write through mode bits; su is required to exercise the read-only source." >&2
+                exit 1
+            }
+            su nobody -s /bin/bash -c "$1"
+        else
+            bash -c "$1"
+        fi
+    }
+    cp -a . "$source_tree/src"
+    chmod a+rx "$source_tree" "$work_tree"
+    chmod -R a-w "$source_tree/src"
+    mkdir -p "$work_tree/repo"
+    cp -a "$source_tree/src/." "$work_tree/repo/"
+    chmod -R a+rwX "$work_tree/repo"
+    chmod a+rwx "$tester_home"
+    if as_tester "touch '$source_tree/src/write-probe'" 2>/dev/null; then
+        echo "Error: read-only source accepted a write, so the read-only case was not exercised." >&2
+        exit 1
+    fi
+    if ! as_tester "touch '$work_tree/repo/write-probe' && rm -f '$work_tree/repo/write-probe'"; then
+        echo "Error: writable copy rejected a write." >&2
+        exit 1
+    fi
+    if ! as_tester "cd '$work_tree/repo' && export HOME='$tester_home' PYTHONDONTWRITEBYTECODE=1 POWERSHELL_TELEMETRY_OPTOUT=1 && python3 -m unittest discover --start-directory .ci_scripts --pattern 'test_install_powershell_*.py' -v" >"$log" 2>&1; then
+        cat "$log" >&2
+        exit 1
+    fi
+    cat "$log"
+    ran=$(sed -n 's/^Ran \([0-9][0-9]*\) tests.*/\1/p' "$log" | tail -n 1)
+    skipped=$(sed -n 's/^OK (skipped=\([0-9][0-9]*\)).*/\1/p' "$log" | tail -n 1)
+    skipped=${skipped:-0}
+    if [ -z "$ran" ] || [ "$ran" -eq 0 ] || [ "$skipped" -ge "$ran" ]; then
+        echo "Error: PowerShell installer tests did not execute (ran=${ran:-0}, skipped=${skipped})." >&2
+        exit 1
+    fi
+    if as_tester "touch '$source_tree/src/write-probe'" 2>/dev/null; then
+        echo "Error: the read-only source accepted a write during the tests." >&2
+        exit 1
+    fi
 
 # Lint the repository's shell scripts (shellcheck). Skipped with a notice when shellcheck is absent.
 lint-sh:
