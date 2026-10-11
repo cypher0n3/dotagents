@@ -1,7 +1,7 @@
 # `dotagents`
 
 [![License: MIT + CC BY 4.0](https://img.shields.io/badge/License-MIT%20%2B%20CC%20BY%204.0-blue.svg)](LICENSE)
-[![Skills](https://img.shields.io/badge/skills-21-blueviolet)](skills/README.md)
+[![Skills](https://img.shields.io/badge/skills-22-blueviolet)](skills/README.md)
 [![Agents](https://img.shields.io/badge/agents-9-blueviolet)](agents/README.md)
 [![Docs](https://img.shields.io/badge/docs-standards-informational)](docs/docs_standards/README.md)
 

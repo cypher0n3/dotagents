@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engineering Principles"
+  short_description: "Apply good engineering principles and preferences"
+  default_prompt: "Use $engineering-principles when working on this."
