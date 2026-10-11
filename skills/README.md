@@ -37,6 +37,7 @@ These skills carry the documentation, specification, and requirements convention
 
 These skills set the implementation and review bar for code changes.
 
+- [`engineering-principles`](engineering-principles/SKILL.md) - Applies good engineering principles and working preferences to coding, design, review, infrastructure, and tooling work.
 - [`senior-developer`](senior-developer/SKILL.md) - Enforces senior developer coding standards: simple readable code, spec compliance, testability, and strict coverage.
 - [`go-developer`](go-developer/SKILL.md) - Applies modern Go semantics, type safety, and secure secret handling when writing or refactoring Go.
 - [`python-test-automation`](python-test-automation/SKILL.md) - Guides writing Python functional and end-to-end tests that validate application behavior.
