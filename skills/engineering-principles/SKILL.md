@@ -111,6 +111,22 @@ Take the simplest path that works now, and add the heavier one only when a real 
 Fix a defect the rules already decide; do not escalate its size.
 A deadline never authorizes dropping scope, and closing a task means completing every step in it.
 
+### Work Only What Was Directed
+
+Work only what the user directed and the defects that work discovers; everything else waits.
+A specification, review, register row, coverage gap, or plan line that describes something is a recorded finding, not authorization to build it.
+Keep workers fed with directed work by splitting or sequencing it, never by inventing work or pulling forward work that is meant to wait.
+When the directed work is blocked, say so instead of filling the queue.
+When a gate seems to need a new capability, make the narrowest fix that clears it and never build the capability behind it.
+An acceptance or closure bar cites an owner decision or canon, never an agent's own plan text.
+
+### Keep Units Small and Focused
+
+Keep each task to one focus area or feature, and each unit to one red-green-refactor cycle.
+A unit holds one failing test or gate, one production change in one package or symbol family, one cleanup, and one landing.
+Split a unit whose brief needs steps before dispatching it.
+Finished work lands, unfinished out-of-scope work stops, and no branch is left dangling.
+
 ## Working With the User and Other Agents
 
 ### Keep Authority With the User

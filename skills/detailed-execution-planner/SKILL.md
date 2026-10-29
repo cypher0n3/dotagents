@@ -126,6 +126,9 @@ Use imperative text plus **identifiers**: paths, commands, test IDs, or scenario
 11. Include [Cursor Plan Frontmatter (Required)](#cursor-plan-frontmatter-required) with `todos` mirroring every checkbox under `## Execution Plan`.
 12. Avoid filler sections and generic advice.
 13. When updating an existing plan, preserve completed work where possible and revise only what is still pending or invalidated.
+14. Plan only the work the user directed and the defects it discovers; a spec, review, or register entry is a finding, not a task, until the user directs it.
+15. Give each task exactly one focus area or feature, and size each unit as one red-green-refactor cycle: one failing test or gate, one production change in one package or symbol family, one cleanup, one landing.
+16. Every acceptance or completion criterion cites the owner decision or canonical requirement that sets it; a criterion with no such source is not added.
 
 ## Planning Workflow
 
@@ -145,6 +148,7 @@ Record the following:
 
 - what must change
 - what must not change
+- what is deliberately not in this plan, so it is not added later
 - required parity, compatibility, or migration constraints
 - required test types
 - completion criteria
