@@ -26,7 +26,7 @@ This holds for any contract, including a rulebook, a spec, or a plan.
 
 Hold one high bar that keeps rising, with no lighter tier for a script, a manifest, or a one-off tool.
 In software the bar is high coverage, acceptance tests, traceable requirements, and a passing gate.
-When touching old code, bring it up to the current standard instead of matching its style.
+When touching old code, bring the lines the change touches up to the current standard instead of matching their style, and leave the code around them as it is.
 
 ### Build Safety Into Structure
 

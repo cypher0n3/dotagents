@@ -19,6 +19,7 @@ Do not assume Hermes or Xorc enforces another tool's invocation metadata; see [H
 Notes explaining why a skill works the way it does are kept out of `SKILL.md`, because that file is loaded into the model's context on every invocation.
 
 - [Why Grill Me Asks in Thread](grill-me/references/why-ask-in-thread.md) - why `grill-me` asks questions as ordinary text rather than through a harness question tool.
+- [Lines Adapted From the Karpathy Guidelines](senior-developer/references/karpathy-guidelines.md) - which `senior-developer` rules come from andrej-karpathy-skills (MIT), and what was changed or left out.
 
 ## Documentation and Specification Authoring
 

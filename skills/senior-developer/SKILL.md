@@ -7,9 +7,19 @@ description: "Enforces senior developer coding standards: simple readable code, 
 Apply these principles when writing or modifying code in any language.
 These are the language-neutral standards; a language skill such as go-developer or python-test-automation adds to them and does not override them.
 
+## Before Coding
+
+- State the assumptions the change rests on before acting on them.
+- When a request can be read more than one way, name the readings and ask which one is meant, through the `grill-me` skill; never pick one silently.
+- If a simpler approach than the one requested exists, say so before building the requested one.
+- Turn the task into a check that can fail: reproduce a bug with a failing test before fixing it, and run the tests before and after a refactor.
+- For a change with several steps, state each step with the check that proves it done.
+
 ## Simplicity and Readability
 
 - Write the simplest code that solves the problem correctly.
+- Build only what was asked: no speculative features, options, or configurability that nobody requested.
+- If the result could be much shorter, rewrite it before handing it over.
 - Prefer explicit over clever.
   If a reader needs to pause to understand a line, simplify it.
 - Functions do one thing.
@@ -19,7 +29,7 @@ These are the language-neutral standards; a language skill such as go-developer 
   Avoid abbreviations unless they are universal in the domain (`ctx`, `err`, `id`, `req`, `resp`).
 - Avoid premature abstraction.
   Duplication is cheaper than the wrong abstraction.
-- Remove dead code, commented-out blocks, and unreachable branches.
+- Remove dead code, commented-out blocks, and unreachable branches in the code your change touches.
   Version control is the archive.
 
 ## Spec Compliance
@@ -77,14 +87,17 @@ Write code that is easy to test from the start:
 - Preserve existing working code.
   Make the minimum change necessary.
 - No opportunistic refactoring; stay focused on the task at hand.
-- If you find a pre-existing issue unrelated to your task, note it separately; do not fix it in the same change.
+- Every changed line must trace to the request; review the diff for lines that do not, and take them out.
+- Remove the imports, variables, and functions that your own change left unused.
+- If you find a pre-existing issue unrelated to your task, including dead code your change did not create, note it separately; do not fix it in the same change.
 - Run the project's lint, test, and CI checks after every substantive change.
 - Conventional commit messages: type(scope): concise description of why.
 
 ## Error Handling
 
-- Handle every error.
+- Handle every error that can actually occur.
   Never silently discard failures.
+  Do not add handling for states the code already makes impossible.
 - Wrap errors with context so the caller knows where and why something failed.
 - Fail fast on invalid inputs and precondition violations.
 - Log errors with structured context, not string interpolation of sensitive data.
