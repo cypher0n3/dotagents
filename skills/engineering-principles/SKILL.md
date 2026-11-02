@@ -127,6 +127,14 @@ A unit holds one failing test or gate, one production change in one package or s
 Split a unit whose brief needs steps before dispatching it.
 Finished work lands, unfinished out-of-scope work stops, and no branch is left dangling.
 
+### Limit Work in Progress and Land at Once
+
+Keep work in progress small: each agent holds one open unit, and each unit holds one working branch and one worktree.
+A unit that has passed review and its gate lands on the integration branch at once; it never waits on its branch for a later gate on main.
+A unit that cannot land is fixed now or closed with its reason recorded, never parked.
+When a unit lands or closes, delete its branch, side branches, and worktree the same day, after confirming the integration branch contains them.
+Start new work only when open work cannot move; finishing outranks starting.
+
 ## Working With the User and Other Agents
 
 ### Keep Authority With the User
@@ -175,6 +183,7 @@ When principles conflict, resolve them in this order:
 - Usability of legitimate work (from structural safety) outranks the strictness of a control, as long as authority does not widen to buy it.
 - The contract (write contract before code) outranks convenience, unless the code is demonstrably the better design, in which case amend the contract on purpose.
 - Control and portability outrank short-term ease.
+- Landing finished work (limit work in progress and land at once) outranks starting new work.
 - Everything left over is settled by proportion to the real problem (size machinery to real problems), read from real usage.
 
 ## Technical Defaults
@@ -208,6 +217,7 @@ This is a stable rule across the board; do not re-derive precedence from how spe
 ### Source Control and Workflow
 
 - Only the user merges to protected and main branches.
+- Land reviewed, gate-passing units on the integration branch as soon as they are ready; the integration branch is not protected unless the repository says so.
 - Never force-push unless the user asks in that session.
 - Never use `git stash`; preserve uncommitted work by committing it to a branch.
 
