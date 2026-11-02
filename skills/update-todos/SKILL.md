@@ -7,38 +7,32 @@ disable-model-invocation: false
 # Update Todos
 
 Reconcile a plan's recorded step status with the work actually done.
-Invoke this workflow only when explicitly requested by the user.
 
 ## Identify the Plan Type
 
-Work out which kind of plan it is before changing anything, because each kind keeps its status in a different place.
+Each kind of plan keeps its status in a different place.
 
-- A Cursor plan is a `.plan.md` file whose YAML frontmatter carries `name`, `overview`, and `todos`.
-- A Claude Code plan is a Markdown file with no frontmatter, whose `- [ ]` / `- [x]` checklist is the record of the work.
-- An Xorc plan is a `.xorcp.md` artifact whose task state is owned by Xorc's native plan tools.
+- Cursor: a `.plan.md` file whose checkboxes and YAML `todos[].status` must agree in count, order, and meaning.
+- Claude Code: a Markdown file with no frontmatter, whose `- [ ]` / `- [x]` checklist is the record.
+- Xorc: a `.xorcp.md` artifact whose task state only Xorc's native plan tools may read and change.
 
-If the plan matches none of these, or the signals conflict, stop and ask which kind it is.
-Never convert one kind's status into another's, such as Xorc task state into Cursor `todos`.
+If the plan matches none of these, or the signals conflict, ask which it is.
+Never translate one kind's status into another's.
 
 ## Check Each Step
 
-Read the whole plan first.
-For each step, check the evidence for its status, such as commits, changed files, and the results of the commands the step names.
-Mark a step complete only from observed evidence, and never report a planned test as passed.
-A completed step whose result no longer holds is a finding to report, not something to uncheck silently.
+Read the whole plan, then check each step against evidence such as commits, changed files, and the output of the commands it names.
+Mark a step complete only from observed evidence, never report a planned test as passed, and report rather than silently uncheck a completed step whose result no longer holds.
 
 ## Update the Status
 
-- For a Cursor plan, update each checkbox under `## Execution Plan` and the matching `todos[].status` together, so both still agree in count, order, and meaning.
-  Update the Cursor agent todos to match when they are in use.
-- For a Claude Code plan, update each checkbox line in the plan file.
-  The session task list may be updated to match, but the plan file stays the record.
-- For an Xorc plan, read the plan and its version through Xorc's native inspection tools and record status only through its native update tools.
-  Do not edit the `.xorcp.md` file by hand or force a lifecycle state.
-  If the native tools are unavailable or cannot represent the change, report that and stop.
+- Cursor: change each checkbox and its `todos[].status` in the same edit, and the Cursor agent todos when they are in use.
+- Claude Code: change the checkbox lines in the plan file; the session task list may mirror them.
+- Xorc: read the plan and its version, then record status, through the native tools only, without hand-editing the file or forcing a lifecycle state.
+  If those tools are unavailable or cannot represent the change, report that and stop.
 
 ## Finish
 
-If a Cursor or Claude Code plan is fully complete, move it to the folder the repository keeps for finished plans, if it has one.
-Report which steps changed status, the evidence for each, and any step whose status could not be confirmed.
+Move a fully complete Cursor or Claude Code plan to the repository's folder for finished plans, if it has one.
+Report each step whose status changed with its evidence, and each step whose status could not be confirmed.
 If unsure, stop and ask.

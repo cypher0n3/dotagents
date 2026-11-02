@@ -8,213 +8,72 @@ disable-model-invocation: false
 
 ## Skill Purpose
 
-Write detailed execution plans that are specific, test-gated, and aligned with requirements and technical specifications.
-Invoke this workflow only when explicitly requested by the user.
-
-## Use This Skill When
-
-- The user asks to create a plan.
-- The user asks to update or refine an existing plan.
-- A task needs a step-by-step implementation sequence before coding starts.
-- A workstream must explicitly follow BDD/TDD with functional testing.
+Write execution plans that are specific, test-gated, and aligned with requirements and technical specifications, for work that needs a step-by-step sequence before coding starts.
 
 ## Before Building Plan
 
-Ask the user detailed questions about anything on which you are not 100% certain.
-Ask questions one at a time.
-Continue asking questions until you are sure you have all needed information and there are zero ambiguities.
+Ask the user about anything you are not certain of, one question at a time, until no ambiguity remains.
 
 ## Select the Plan Target
 
-Determine the requested consumer from the user's request, the existing plan artifact, and the available host tools before choosing a format.
-If those signals conflict or no target is established, ask which target is intended rather than guessing or combining schemas.
+Determine the target from the user's request, any existing plan, and the available host tools.
+If those signals conflict or establish no target, ask rather than guessing or combining schemas, and keep each target's fields and lifecycle operations out of the others' artifacts.
 
-- For Xorc `.xorcp.md` plans, read and follow [Xorc Planning Workflow](references/xorc-plans.md), including its validation and update rules.
-  Do not use the Cursor template, `todos` frontmatter, or Cursor TODO synchronization for Xorc.
-  After completing that workflow, stop; every section below this target-selection section applies only to Cursor and Claude Code plans.
-- For Cursor `.plan.md` plans, follow the remaining sections and the Cursor template they reference.
-  Keep native Xorc fields and lifecycle operations out of the Cursor artifact.
-- For Claude Code plans, read and follow [Claude Code Planning Workflow](references/claude-plans.md) for the file's format, location, approval, and task list.
-  Follow the remaining sections too, skipping the rules marked for Cursor plans, which govern the `todos` frontmatter a Claude plan does not carry.
-
-## Cursor Plan Frontmatter (Required)
-
-For Cursor plans only, every generated plan **must** begin with YAML frontmatter that matches the **Cursor plan** shape so plans can be imported and tracked as todos.
-
-- `name`: short human-readable plan title (string).
-- `overview`: multi-line summary of goal, scope, and approach (YAML `|` block string).
-- `todos`: ordered list of steps; **one todo per execution step**, in the same order as the checklist under `## Execution Plan` (see below).
-
-Each todo entry must include:
-
-- `id`: stable unique id for that step (e.g. `my-plan-step-001`, incrementing).
-- `content`: same intent as the matching markdown checkbox line; **must be as specific as the checkbox** (commands, paths, test names - not shortened into vague summaries).
-- `status`: `pending` or `completed` (use `pending` for new plans unless the user marks work done).
-- `dependencies`: optional; for a **linear** plan, each step after the first should list the **previous** step's `id` so ordering is explicit.
-- For parallel work, use the same dependency pattern only when the user asks for it.
-
-### Synchronization Rule
-
-For Cursor plans only, the number of items in `todos`, their order, and their meaning must match **every** `- [ ]` / `- [x]` line under `## Execution Plan` (only those lines; section headings are not steps).
-
-When you update the plan body, update `todos` in lockstep.
-
-## Flat Checklist Only: No Nested Step Bullets
-
-Use a **single flat list** of top-level checkboxes for all work.
-
-**Do not** nest checklist items under other checklist items.
-
-### Anti-Pattern Examples
-
-```markdown
-- [ ] Higher-level step:
-  - [ ] Sub-step 1
-  - [ ] Sub-step 2
-```
-
-### Preferred Pattern
-
-Split into separate top-level steps (same content, no hierarchy under a parent checkbox):
-
-```markdown
-- [ ] Higher-level step - sub-step 1 (describe concrete action).
-- [ ] Higher-level step - sub-step 2 (describe concrete action).
-```
-
-Section headings (`###`, `####`) still group work; only the **checkbox list** stays flat.
-
-## Explicit Step Wording (Required)
-
-Every step (checkbox line and matching `todos[].content`) must be **specific enough that an executor never has to guess** what to run, open, or change.
-
-### What Each Step Must Name (When Applicable)
-
-- **Commands**: the exact invocation (e.g. `just e2e`, `go test ./package/...`, `npx markdownlint-cli2 path`), not "run tests" or "run the suite".
-- **Scopes**: package paths, directories, or file globs (repo-relative paths in backticks).
-- **Tests**: concrete test names, files, modules, tags, or BDD scenario titles - not "all tests", "the failing tests", or "all 3 tests" without naming which three.
-- **Code or docs**: files or symbols to edit, or a clear discovery sub-step that lists them first.
-- **Artifacts**: outputs to produce (e.g. report path, migration name) when the step is not obvious from the command alone.
-
-If the exact names are unknown at plan time, the step must say **how** they will be identified (e.g. "list failing tests from `go test ./...` output and add each as its own step in the next plan revision") - not leave a vague single step in place of that work.
-
-### Ambiguous Wording to Avoid
-
-- Steps that rely on unstated context: "Run all 3 tests", "run the new tests", "fix the handler", "update as needed".
-- Counts or groups without identifiers: "run every E2E", "run the integration tests" (unless the repo has a single documented target and the step names it, e.g. `just integration`).
-
-### Explicit Wording for Steps
-
-Use imperative text plus **identifiers**: paths, commands, test IDs, or scenario names so the step is self-contained.
+- Xorc `.xorcp.md`: follow [Xorc Planning Workflow](references/xorc-plans.md) with the [Core Rules](#core-rules) and the step naming rules in [Step Format](#step-format), but not the checklist, template, or frontmatter.
+- Cursor `.plan.md`: follow every section below, including [Cursor Frontmatter](#cursor-frontmatter).
+- Claude Code: follow [Claude Code Planning Workflow](references/claude-plans.md) and every section below except Cursor Frontmatter.
 
 ## Core Rules
 
-1. Treat requirements as the source of truth, then technical specs, then current implementation.
-2. Before planning, read the relevant requirements, tech specs, and implementation context.
-3. If requirements or specs are missing, ambiguous, or contradictory, stop and call out the gap.
-4. Write the plan in markdown, using **only top-level** `- [ ]` / `- [x]` lines for steps and headings to group them (see [Flat Checklist Only: No Nested Step Bullets](#flat-checklist-only-no-nested-step-bullets)).
-5. Make the plan executable: each checkbox must be a concrete action with explicit scope, not a vague intention (see [Explicit Step Wording (Required)](#explicit-step-wording-required)).
-   Prefer short, imperative step text that still names **what** and **where**, and be explicit about files, tests, commands, and artifacts.
-   Vague phrases like "run all targeted tests" are not enough unless the plan already lists those targets by path or name.
-6. Use BDD/TDD explicitly:
-   - add or update behavior specs first
-   - write failing tests before implementation
-   - implement the smallest change to make tests pass
-   - refactor only after tests are green
-7. Include additional functional tests for user-facing or API-facing behavior.
-8. **Task independence**: each task has its own Requirements and Specifications list, Discovery steps, and Testing, so tasks can be read and executed independently with all steps needed to complete that task.
-9. Add validation gates after each task (within that task's Testing sub-section) and require them to pass before moving on.
-10. Do not allow a later task to start until the current task's validation steps are complete, and include explicit hold points that say so (e.g. "do not proceed until this passes", "do not start the next task until ...").
-11. For Cursor plans, include [Cursor Plan Frontmatter (Required)](#cursor-plan-frontmatter-required) with `todos` mirroring every checkbox under `## Execution Plan`.
-12. Avoid filler sections and generic advice.
-13. When updating an existing plan, preserve completed work where possible and revise only what is still pending or invalidated.
-14. Plan only the work the user directed and the defects it discovers; a spec, review, or register entry is a finding, not a task, until the user directs it.
-15. Give each task exactly one focus area or feature, and size each unit as one red-green-refactor cycle: one failing test or gate, one production change in one package or symbol family, one cleanup, one landing.
-16. Every acceptance or completion criterion cites the owner decision or canonical requirement that sets it; a criterion with no such source is not added.
+1. Treat requirements as the source of truth, then technical specs, then current implementation, and read all three before planning.
+2. If requirements or specs are missing, ambiguous, or contradictory, stop and call out the gap.
+3. Plan only the work the user directed and the defects it discovers; a spec, review, or register entry is a finding, not a task, until the user directs it.
+4. Give each task exactly one focus area or feature, sized as one red-green-refactor cycle: one failing test or gate, one production change in one package or symbol family, one cleanup, one landing.
+5. Make each task self-contained, with its own Requirements and Specifications list, Discovery, Red, Green, Refactor, Testing, and Closeout, so it can be executed and validated on its own.
+6. For code changes, use BDD/TDD: update behavior specs first, write failing tests, make the smallest change that passes them, refactor only when green, and add functional tests for user-facing or API-facing behavior.
+7. End each phase with a validation gate and an explicit hold point, such as "do not start the next task until this passes".
+8. Cite, for every acceptance or completion criterion, the owner decision or canonical requirement that sets it; add no criterion without one.
+9. When updating a plan, read all of it first, keep completed steps and their evidence unless now invalid, place new steps in the right task and phase, and revise only what is pending or invalidated.
+10. Leave out filler sections, generic advice, and narrative.
+
+## Step Format
+
+Write every step as a flat, top-level `- [ ]` / `- [x]` line under `## Execution Plan`.
+Headings group steps; never nest a checkbox under another, and split a step with sub-steps into lines such as `- [ ] Higher-level step - sub-step 1 (concrete action).`
+
+Each step must let an executor act without guessing, so it names, where applicable:
+
+- the exact command, such as `go test ./pkg/... -run TestName` or `just e2e`, never "run the tests";
+- the package paths, directories, or globs in scope, in backticks;
+- the test names, files, tags, or BDD scenario titles, never "all 3 tests" or "the new tests";
+- the files or symbols to change, and any output artifact such as a report path or migration name.
+
+When names are unknown at plan time, the step says how they will be found, such as "list failing tests from `go test ./...` and add each as a step in the next revision".
+Never rely on unstated context, as in "fix the handler" or "update as needed".
 
 ## Planning Workflow
 
-Follow these phases in the order given when producing or revising a plan.
+1. Gather the goal, the requirement and spec documents, the code, tests, and docs likely to change, and the gaps, assumptions, dependencies, and risks.
+2. Record what must change, what must not, what is deliberately excluded, any parity or migration constraints, the required test types, and the completion criteria.
+3. Read [`assets/plan-template.md`](assets/plan-template.md) and draft from it unless the user asks for another structure; drop its frontmatter for Claude Code.
+   Close each task with a completion report (what was done, what passed, deviations), then mark its completed steps `- [x]` as its last step.
+   End with a documentation and closeout task that ends in a final plan completion report.
+4. For Cursor, fill in the frontmatter after the body.
+5. Check the finished plan against every rule above before handing it over.
 
-### Gather Inputs
+## Cursor Frontmatter
 
-- Identify the user goal.
-- Identify the relevant requirement documents.
-- Identify the relevant technical specifications.
-- Identify the current code, tests, and docs that will likely change.
-- Identify missing information, assumptions, dependencies, and risks.
+A Cursor plan begins with YAML frontmatter so it can be imported and tracked as todos.
 
-### Define Scope and Constraints
+- `name`: a short plan title.
+- `overview`: a `|` block summarizing goal, scope, and approach.
+- `todos`: one entry per checkbox line under `## Execution Plan`, in the same order and with the same meaning; headings are not steps.
 
-Record the following:
+Each todo has these fields.
 
-- what must change
-- what must not change
-- what is deliberately not in this plan, so it is not added later
-- required parity, compatibility, or migration constraints
-- required test types
-- completion criteria
+- `id`: a stable unique id, such as `my-plan-step-001`.
+- `content`: as specific as its checkbox line, never shortened.
+- `status`: `pending` or `completed`; `pending` for a new plan unless the user marks work done.
+- `dependencies`: for a linear plan, the previous step's `id`; use parallel tracks only when the user asks.
 
-### Build the Execution Sequence
-
-Order the plan as a sequence of **tasks** (phases of work).
-Each task is **self-contained** and independently executable: it has its own discovery, implementation, and testing sub-sections so that the work in that task can be completed and validated without relying on later tasks.
-
-Within each task, use this shape:
-
-1. **Requirements and Specifications**: include in the plan a list of the canonical requirement and spec documents for this task (so executors do not need to guess).
-2. **Discovery steps**: gather current implementation and context for this task (e.g. read the listed specs, inspect code and tests, identify gaps).
-3. **Red phase**: add or update specs and failing tests for this task.
-4. **Green phase**: implement the smallest change to make those tests pass.
-5. **Refactor phase**: refine implementation without changing behavior; keep tests green.
-6. **Testing**: validation gate for this task (targeted tests, lint, etc.); do not proceed until they pass.
-7. **Closeout (Task N)**: generate a **task completion report** (what was done, what passed, any deviations or notes), then mark all completed steps in the plan with `- [x]` as the **last step** in the task before starting the next task.
-
-Add a final **documentation and closeout** task for cross-cutting docs and follow-up.
-
-### Add Mandatory Test Gates
-
-The plan must explicitly require, **within each task**:
-
-- spec or behavior definition updates before implementation (Discovery / Red)
-- failing automated tests before code changes (Red)
-- functional test coverage when behavior is user-facing or API-facing (Red)
-- targeted validation in that task's Testing sub-section before moving to the next task
-- **closeout for each task**: mark completed steps with `- [x]` and generate a task completion report before starting the next task
-- final verification in the last task (or a dedicated closeout task) before the plan is complete, including a final plan completion report
-
-### Update Plans Carefully
-
-When updating an existing plan:
-
-- read the whole current plan first
-- keep completed items checked unless they are now invalid
-- insert new steps at the correct point in sequence (within the right task and sub-section)
-- update validation steps if scope or task boundaries changed
-- ensure the revised plan still enforces task ordering and per-task validation
-- for Cursor plans, update YAML `todos` so it stays aligned with every checkbox line under `## Execution Plan`
-
-## Default Plan Template
-
-Use [`assets/plan-template.md`](assets/plan-template.md) unless the user asks for a different structure.
-Read it before drafting, and follow its task shape: every task carries its own Requirements and Specifications list, Discovery steps, Red, Green, Refactor, Testing, and Closeout, so it can be executed and validated on its own.
-
-For Cursor plans, **after drafting the body**, fill in `todos` so each entry's `content` matches one checkbox line in order (same specificity; do not shorten to vague summaries).
-Set `dependencies` to chain linear steps (step N depends on step N-1) unless the user needs parallel tracks.
-
-## Quality Bar
-
-Before finalizing a plan, verify that it:
-
-- for Cursor plans, includes valid **YAML frontmatter** with `name`, `overview`, and `todos` per [Cursor Plan Frontmatter (Required)](#cursor-plan-frontmatter-required)
-- for Cursor plans, has **one `todos` entry per** `- [ ]` / `- [x]` line under `## Execution Plan`, in the same order, with ids and dependencies consistent with that sequence
-- for Claude Code plans, has no frontmatter and follows [Claude Code Planning Workflow](references/claude-plans.md)
-- uses **only flat** checklist lines (no nested `- [ ]` under another `- [ ]`)
-- is detailed enough for an executor to execute without guessing
-- uses **explicit step wording** everywhere: no ambiguous shortcuts like "run all N tests" without naming which tests, files, or commands (see [Explicit Step Wording (Required)](#explicit-step-wording-required))
-- includes in each task a **Task N Requirements and Specifications** list so executors do not need to guess (or calls out that they still need to be identified)
-- includes BDD/TDD and functional testing where applicable
-- **gives each task its own Requirements and Specifications, Discovery steps, Testing, and Closeout** (task completion report, then mark completed steps as the last step) so tasks are independently executable
-- enforces validation within each task before the next task starts
-- uses checkbox steps throughout the execution section
-- stays concise and avoids unnecessary narrative
+Change `todos` in the same edit as every change to the checklist.
