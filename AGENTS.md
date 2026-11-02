@@ -15,13 +15,10 @@
 - NEVER create a git worktree inside the project directory, including under `.claude/worktrees/`; repository-wide tooling run from the main checkout sweeps nested worktrees in with it.
 - Create worktrees outside the project, as siblings of its other worktrees (for example `~/projects/personal/<project>_wtN`).
 
-## Branches and Landing
+## Branches
 
-- Land reviewed work that passes its gate on the repository's integration branch (for example `merge_prep`) as soon as it is ready; do not hold it on a feature branch.
-- Keep one working branch per unit, and delete temporary side branches (merge previews, bases, diagnostics) when the unit lands or closes.
-- Delete a landed branch and its worktree the same day, after checking that the integration branch contains it.
-- A lead owns and cleans up every branch and worktree its agents create, including those of parked or reassigned agents.
-- Only the user merges to `main` and other protected branches; the integration branch is not one of them unless the repository says so.
+- Land reviewed work that passes its gate as soon as it is ready, and delete its branch and worktree once it has landed.
+- Whoever creates branches and worktrees, or directs agents that create them, cleans them up.
 
 ## Asking Questions
 
