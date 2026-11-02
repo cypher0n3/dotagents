@@ -53,7 +53,7 @@ If the installed tools cannot represent the requested change, explain the limita
 
 Record completion only from observed execution evidence and successful per-task validation.
 If a human-readable checklist is maintained in the body, keep it consistent with native task state without using it as the source of execution status.
-Do not invoke `update-cursor-todos` for Xorc.
+`update-todos` reconciles Xorc status only through these native tools, never through Cursor todos.
 
 ## Final Verification
 

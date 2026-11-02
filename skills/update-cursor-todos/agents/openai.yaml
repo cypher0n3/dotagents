@@ -1,4 +1,0 @@
-interface:
-  display_name: "Update Cursor Todos"
-  short_description: "Reconcile plan and todo status"
-  default_prompt: "Use $update-cursor-todos to reconcile the Cursor plan and todo items with the work actually completed."

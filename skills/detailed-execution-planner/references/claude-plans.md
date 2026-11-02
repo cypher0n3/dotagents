@@ -24,7 +24,7 @@ Do not describe a written plan as approved until the user approves it, and do no
 Claude Code's task list tools hold session state that ends with the session, so they do not replace the checklist in the plan file.
 Do not create task list entries while writing the plan unless the user asks.
 An executor may mirror the current task's steps into the task list while working, but records each completed step by changing its `- [ ]` line in the plan file to `- [x]`, from observed results only.
-Do not invoke `update-cursor-todos` for a Claude plan.
+Use `update-todos` to reconcile a Claude plan's checklist with the work done.
 
 ## Update an Existing Plan
 
