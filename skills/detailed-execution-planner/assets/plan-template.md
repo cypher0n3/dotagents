@@ -52,27 +52,21 @@ todos:
 
 #### Red (Task 1)
 
-- [ ] Create or update the behavior definition for this task.
-- [ ] Add or update the relevant BDD scenarios.
+- [ ] Create or update the behavior definition and BDD scenarios for this task.
 - [ ] Identify the unit, integration, and functional tests required for this task.
-- [ ] Add or update automated tests so the new behavior fails for the right reason.
-- [ ] Add or extend functional tests for user-facing or API-facing behavior as needed.
+- [ ] Add or update automated tests, including functional tests for user-facing or API-facing behavior, so the new behavior fails for the right reason.
 - [ ] Run `[exact command, e.g. go test ./path/... -run TestName]` and confirm the expected failures before implementation.
 - [ ] Validation gate - do not proceed until those named tests fail for the expected reason.
 
 #### Green (Task 1)
 
-- [ ] Implement the smallest change set needed to satisfy the failing tests.
-- [ ] Keep the implementation aligned with requirements and technical specs.
-- [ ] Avoid unrelated refactors or speculative changes.
+- [ ] Implement the smallest change set that satisfies the failing tests, with no unrelated refactors or speculative changes.
 - [ ] Re-run the same command(s) from Red until they pass (name the command and package path).
 - [ ] Validation gate - do not proceed until those same tests are green.
 
 #### Refactor (Task 1)
 
-- [ ] Refine the implementation without changing behavior.
-- [ ] Improve structure, naming, or duplication only where needed.
-- [ ] Keep all tests green throughout.
+- [ ] Improve structure, naming, or duplication where needed, without changing behavior.
 - [ ] Re-run the same test command(s) from Green (name them); add lint if this refactor touched style or imports.
 - [ ] Validation gate - do not proceed until refactor changes are verified.
 

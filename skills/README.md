@@ -50,8 +50,8 @@ These skills set the implementation and review bar for code changes.
 
 These skills shape how an agent plans work and reports back on it.
 
-- [`detailed-execution-planner`](detailed-execution-planner/SKILL.md) *(user-invoked only)* - Creates and updates test-gated Cursor plans or native Xorc execution plans.
-- [`update-cursor-todos`](update-cursor-todos/SKILL.md) *(user-invoked only)* - Updates Cursor plan and agent todo items; does not synchronize Xorc plans.
+- [`detailed-execution-planner`](detailed-execution-planner/SKILL.md) *(user-invoked only)* - Creates and updates test-gated Cursor plans, Claude Code plans, or native Xorc execution plans.
+- [`update-todos`](update-todos/SKILL.md) *(user-invoked only)* - Updates the step and todo status of Cursor, Claude Code, and Xorc plans.
 - [`grill-me`](grill-me/SKILL.md) - Prompt me with questions, one at a time, until we have a shared understanding.
 - [`agent-feedback`](agent-feedback/SKILL.md) *(user-invoked only)* - Quick prompt to indicate that the provided info was produced by another agent for consideration.
 
