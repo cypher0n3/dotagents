@@ -1,6 +1,6 @@
 ---
 name: detailed-execution-planner
-description: Creates and updates test-gated Cursor or native Xorc execution plans. Invoke only when explicitly called by user.
+description: Creates and updates test-gated Cursor, Claude Code, or native Xorc execution plans. Invoke only when explicitly called by user.
 user-invocable: true
 disable-model-invocation: false
 ---
@@ -27,13 +27,15 @@ Continue asking questions until you are sure you have all needed information and
 ## Select the Plan Target
 
 Determine the requested consumer from the user's request, the existing plan artifact, and the available host tools before choosing a format.
-If those signals conflict or neither Cursor nor Xorc is established, ask which target is intended rather than guessing or combining schemas.
+If those signals conflict or no target is established, ask which target is intended rather than guessing or combining schemas.
 
 - For Xorc `.xorcp.md` plans, read and follow [Xorc Planning Workflow](references/xorc-plans.md), including its validation and update rules.
   Do not use the Cursor template, `todos` frontmatter, or Cursor TODO synchronization for Xorc.
-  After completing that workflow, stop; every section below this target-selection section applies only to Cursor plans.
+  After completing that workflow, stop; every section below this target-selection section applies only to Cursor and Claude Code plans.
 - For Cursor `.plan.md` plans, follow the remaining sections and the Cursor template they reference.
   Keep native Xorc fields and lifecycle operations out of the Cursor artifact.
+- For Claude Code plans, read and follow [Claude Code Planning Workflow](references/claude-plans.md) for the file's format, location, approval, and task list.
+  Follow the remaining sections too, skipping the rules marked for Cursor plans, which govern the `todos` frontmatter a Claude plan does not carry.
 
 ## Cursor Plan Frontmatter (Required)
 
@@ -53,7 +55,7 @@ Each todo entry must include:
 
 ### Synchronization Rule
 
-The number of items in `todos`, their order, and their meaning must match **every** `- [ ]` / `- [x]` line under `## Execution Plan` (only those lines; section headings are not steps).
+For Cursor plans only, the number of items in `todos`, their order, and their meaning must match **every** `- [ ]` / `- [x]` line under `## Execution Plan` (only those lines; section headings are not steps).
 
 When you update the plan body, update `todos` in lockstep.
 
@@ -123,7 +125,7 @@ Use imperative text plus **identifiers**: paths, commands, test IDs, or scenario
 8. **Task independence**: each task has its own Requirements and Specifications list, Discovery steps, and Testing, so tasks can be read and executed independently with all steps needed to complete that task.
 9. Add validation gates after each task (within that task's Testing sub-section) and require them to pass before moving on.
 10. Do not allow a later task to start until the current task's validation steps are complete, and include explicit hold points that say so (e.g. "do not proceed until this passes", "do not start the next task until ...").
-11. Include [Cursor Plan Frontmatter (Required)](#cursor-plan-frontmatter-required) with `todos` mirroring every checkbox under `## Execution Plan`.
+11. For Cursor plans, include [Cursor Plan Frontmatter (Required)](#cursor-plan-frontmatter-required) with `todos` mirroring every checkbox under `## Execution Plan`.
 12. Avoid filler sections and generic advice.
 13. When updating an existing plan, preserve completed work where possible and revise only what is still pending or invalidated.
 14. Plan only the work the user directed and the defects it discovers; a spec, review, or register entry is a finding, not a task, until the user directs it.
@@ -190,22 +192,23 @@ When updating an existing plan:
 - insert new steps at the correct point in sequence (within the right task and sub-section)
 - update validation steps if scope or task boundaries changed
 - ensure the revised plan still enforces task ordering and per-task validation
-- update YAML `todos` so it stays aligned with every checkbox line under `## Execution Plan`
+- for Cursor plans, update YAML `todos` so it stays aligned with every checkbox line under `## Execution Plan`
 
 ## Default Plan Template
 
 Use [`assets/plan-template.md`](assets/plan-template.md) unless the user asks for a different structure.
 Read it before drafting, and follow its task shape: every task carries its own Requirements and Specifications list, Discovery steps, Red, Green, Refactor, Testing, and Closeout, so it can be executed and validated on its own.
 
-**After drafting the body**, fill in `todos` so each entry's `content` matches one checkbox line in order (same specificity; do not shorten to vague summaries).
+For Cursor plans, **after drafting the body**, fill in `todos` so each entry's `content` matches one checkbox line in order (same specificity; do not shorten to vague summaries).
 Set `dependencies` to chain linear steps (step N depends on step N-1) unless the user needs parallel tracks.
 
 ## Quality Bar
 
 Before finalizing a plan, verify that it:
 
-- includes valid **YAML frontmatter** with `name`, `overview`, and `todos` per [Cursor Plan Frontmatter (Required)](#cursor-plan-frontmatter-required)
-- has **one `todos` entry per** `- [ ]` / `- [x]` line under `## Execution Plan`, in the same order, with ids and dependencies consistent with that sequence
+- for Cursor plans, includes valid **YAML frontmatter** with `name`, `overview`, and `todos` per [Cursor Plan Frontmatter (Required)](#cursor-plan-frontmatter-required)
+- for Cursor plans, has **one `todos` entry per** `- [ ]` / `- [x]` line under `## Execution Plan`, in the same order, with ids and dependencies consistent with that sequence
+- for Claude Code plans, has no frontmatter and follows [Claude Code Planning Workflow](references/claude-plans.md)
 - uses **only flat** checklist lines (no nested `- [ ]` under another `- [ ]`)
 - is detailed enough for an executor to execute without guessing
 - uses **explicit step wording** everywhere: no ambiguous shortcuts like "run all N tests" without naming which tests, files, or commands (see [Explicit Step Wording (Required)](#explicit-step-wording-required))
