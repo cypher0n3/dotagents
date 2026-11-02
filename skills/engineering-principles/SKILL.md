@@ -125,7 +125,9 @@ An acceptance or closure bar cites an owner decision or canon, never an agent's 
 Keep each task to one focus area or feature, and each unit to one red-green-refactor cycle.
 A unit holds one failing test or gate, one production change in one package or symbol family, one cleanup, and one landing.
 Split a unit whose brief needs steps before dispatching it.
-Finished work lands, unfinished out-of-scope work stops, and no branch is left dangling.
+Keep work in progress small, and finish open work before starting new work.
+Finished work lands as soon as it passes review and its gate, never held for an unrelated later gate; work that cannot land is fixed or closed, never parked.
+Unfinished out-of-scope work stops, and whoever creates a branch or worktree, or directs the agent that did, deletes it once its work lands or closes.
 
 ## Working With the User and Other Agents
 
