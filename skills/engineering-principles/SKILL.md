@@ -125,14 +125,9 @@ An acceptance or closure bar cites an owner decision or canon, never an agent's 
 Keep each task to one focus area or feature, and each unit to one red-green-refactor cycle.
 A unit holds one failing test or gate, one production change in one package or symbol family, one cleanup, and one landing.
 Split a unit whose brief needs steps before dispatching it.
-Finished work lands, unfinished out-of-scope work stops, and no branch is left dangling.
-
-### Limit Work in Progress and Land at Once
-
 Keep work in progress small, and finish open work before starting new work.
-Land finished work as soon as it passes review and its gate; do not hold it back for a later, unrelated gate.
-Work that cannot land is fixed or closed with its reason recorded, never parked.
-Delete a branch and its worktree once their work has landed or closed.
+Finished work lands as soon as it passes review and its gate, never held for an unrelated later gate; work that cannot land is fixed or closed, never parked.
+Unfinished out-of-scope work stops, and whoever creates a branch or worktree, or directs the agent that did, deletes it once its work lands or closes.
 
 ## Working With the User and Other Agents
 
@@ -182,7 +177,6 @@ When principles conflict, resolve them in this order:
 - Usability of legitimate work (from structural safety) outranks the strictness of a control, as long as authority does not widen to buy it.
 - The contract (write contract before code) outranks convenience, unless the code is demonstrably the better design, in which case amend the contract on purpose.
 - Control and portability outrank short-term ease.
-- Finishing open work (limit work in progress and land at once) outranks starting new work.
 - Everything left over is settled by proportion to the real problem (size machinery to real problems), read from real usage.
 
 ## Technical Defaults

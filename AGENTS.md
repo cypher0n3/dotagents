@@ -15,11 +15,6 @@
 - NEVER create a git worktree inside the project directory, including under `.claude/worktrees/`; repository-wide tooling run from the main checkout sweeps nested worktrees in with it.
 - Create worktrees outside the project, as siblings of its other worktrees (for example `~/projects/personal/<project>_wtN`).
 
-## Branches
-
-- Land reviewed work that passes its gate as soon as it is ready, and delete its branch and worktree once it has landed.
-- Whoever creates branches and worktrees, or directs agents that create them, cleans them up.
-
 ## Asking Questions
 
 - Do NOT use the question or ask tool provided by the harness.
