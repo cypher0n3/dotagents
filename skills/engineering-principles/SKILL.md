@@ -43,6 +43,15 @@ Unify duplicate paths, do not wrap dependencies, remove dead mechanisms instead 
 Trim a rule that lives elsewhere to a pointer.
 Parallel paths drift, and a system too large to hold in your head cannot be kept honest.
 
+### Apply DRY and KISS
+
+Apply DRY and KISS.
+Keep one representation of each fact, rule, and transformation.
+Keep the design to the simplest form that meets the real need.
+Every additional property on an object is one more thing a user has to input or update.
+The more requirements you put on the user, the higher the friction and the lower the adoption.
+Derive or default a value before asking the user for it.
+
 ### Recover Then Degrade Then Fail Loud
 
 Never fail silently, and never lose the user's work.
@@ -176,6 +185,7 @@ When principles conflict, resolve them in this order:
 - Structural safety (build safety into structure) outranks recovery, and authority never widens silently to smooth a failure.
 - Usability of legitimate work (from structural safety) outranks the strictness of a control, as long as authority does not widen to buy it.
 - The contract (write contract before code) outranks convenience, unless the code is demonstrably the better design, in which case amend the contract on purpose.
+- Fewer requirements on the user (apply DRY and KISS) outrank a richer object, as long as integrity, safety, and the contract still hold.
 - Control and portability outrank short-term ease.
 - Everything left over is settled by proportion to the real problem (size machinery to real problems), read from real usage.
 
