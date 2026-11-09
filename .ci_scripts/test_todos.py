@@ -386,13 +386,42 @@ class CleanTodosTest(unittest.TestCase):
         result = todos.clean_todos(path, dry_run=False)
         self.assertEqual(result, 0)
 
-    def test_symlink_rejected(self) -> None:
-        """Refuse to follow symlinks."""
+    def test_symlink_write_preserves_link(self) -> None:
+        """Writing through a symlink updates the target and preserves the link."""
         target = self.write_file(MINIMAL_VALID)
         link = self.root / "link.yaml"
         link.symlink_to(target)
+
+        # Verify we can read through the symlink
+        self.assertTrue(link.is_symlink())
         result = todos.list_todos(link, "all")
-        self.assertEqual(result, 1)
+        self.assertEqual(result, 0)
+
+        # Add a task through the symlink
+        import argparse
+        args = argparse.Namespace(
+            title="New task via symlink",
+            id=None,
+            status=None,
+            priority=None,
+            description=None,
+            assignee_kind=None,
+            assignee_name=None,
+            agent_type=None,
+            depends_on=None,
+            parent=None,
+        )
+        result = todos.add_todo(link, args, dry_run=False)
+        self.assertEqual(result, 0)
+
+        # Verify the link is still a symlink
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(link.resolve(), target.resolve())
+
+        # Verify the target was updated
+        data = todos.load_yaml(target)
+        self.assertEqual(len(data["todos"]), 2)
+        self.assertEqual(data["todos"][1]["title"], "New task via symlink")
 
     def test_duplicate_ids_rejected(self) -> None:
         """Duplicate todo IDs cause validation error."""
