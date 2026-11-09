@@ -10,7 +10,7 @@ root_dir := justfile_directory()
 
 # Every directory holding tracked Python; .ci_scripts/python_quality_gate.py
 # rejects Python anywhere else, so lint-python cannot miss a file.
-python_roots := ".ci_scripts scripts"
+python_roots := ".ci_scripts scripts skills"
 
 # Show list of available recipes (same as just --list).
 default:

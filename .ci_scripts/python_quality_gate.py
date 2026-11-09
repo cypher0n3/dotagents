@@ -12,7 +12,7 @@ import sys
 from pathlib import Path, PurePosixPath
 
 # Keep in sync with python_roots in the justfile.
-OWNED_PYTHON_ROOTS = (".ci_scripts", "scripts")
+OWNED_PYTHON_ROOTS = (".ci_scripts", "scripts", "skills")
 
 
 def uncovered_python_paths(paths: list[str]) -> list[str]:
