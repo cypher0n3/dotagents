@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "todos-schema.json",
+  "title": "Task Management Structure",
+  "type": "object",
+  "required": ["todos"],
+  "properties": {
+    "meta": {"type": "object", "properties": {"title": {"type": "string"}, "created": {"type": "string", "format": "date-time"}, "updated": {"type": "string", "format": "date-time"}}},
+    "todos": {"type": "array", "items": {"$ref": "#/$defs/task"}}
+  },
+  "$defs": {
+    "task": {
+      "type": "object",
+      "required": ["title"],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string", "minLength": 1},
+        "description": {"type": "string"},
+        "status": {"type": "string", "enum": ["pending", "in_progress", "blocked", "done", "cancelled"]},
+        "priority": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+        "assignee": {
+          "oneOf": [
+            {"type": "object", "required": ["kind"], "properties": {"kind": {"const": "human"}, "name": {"type": "string"}}},
+            {"type": "object", "required": ["kind", "agent_type"], "properties": {"kind": {"const": "agent"}, "agent_type": {"type": "string"}, "requires_human_review": {"type": "boolean"}}}
+          ]
+        },
+        "depends_on": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "files": {"type": "array", "items": {"type": "object", "required": ["path", "op"], "properties": {"path": {"type": "string", "minLength": 1}, "op": {"type": "string", "enum": ["create", "read", "update", "delete"]}, "renamed_to": {"type": "string"}, "reason": {"type": "string"}}}},
+        "acceptance_criteria": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "tags": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "due": {"type": "string", "format": "date"},
+        "created": {"type": "string", "format": "date-time"},
+        "completed": {"type": "string", "format": "date-time"},
+        "blocked_reason": {"type": "string"},
+        "subtasks": {"type": "array", "items": {"$ref": "#/$defs/task"}}
+      }
+    }
+  }
+}
