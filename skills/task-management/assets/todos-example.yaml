@@ -1,0 +1,122 @@
+# yaml-language-server: $schema=todos-schema.json
+---
+meta:
+  title: Project Task Tracking
+  created: 2026-11-08T19:00:00Z
+  updated: 2026-11-08T19:30:00Z
+  notes:
+    project_overview: |
+      This file tracks tasks for implementing the YAML todos skill.
+      Tasks are assigned to humans or agent types, not specific agent instances.
+    workflow: |
+      Use todos-list to view open tasks by priority and age.
+      Use todos-clean to remove completed tasks and prune stale dependencies.
+
+todos:
+  - id: design-schema
+    title: Design JSON Schema for todos structure
+    description: Create comprehensive schema with all required and optional fields
+    priority: critical
+    status: done
+    assignee:
+      kind: human
+      name: G. Andre Vaillancourt
+    files:
+      - path: skills/yaml-todos/assets/todos-schema.json
+        op: create
+        reason: Define structure validation rules
+    acceptance_criteria:
+      - Schema validates all required fields
+      - Supports both human and agent assignees
+      - Enforces conditional requirements like blocked_reason
+    tags:
+      - schema
+      - foundation
+    created: 2026-11-08T19:00:00Z
+    completed: 2026-11-08T19:15:00Z
+
+  - id: implement-cli
+    title: Implement Python CLI for todos management
+    description: Build todos-list and todos-clean commands with proper error handling
+    priority: high
+    status: in_progress
+    assignee:
+      kind: agent
+      agent_type: coder
+      requires_human_review: true
+    depends_on:
+      - design-schema
+    files:
+      - path: skills/yaml-todos/scripts/todos.py
+        op: create
+        reason: Main CLI implementation
+    acceptance_criteria:
+      - List command filters by assignee type
+      - Sort by priority then creation date
+      - Clean preserves comments and schema modeline
+      - Atomic writes with error handling
+    tags:
+      - implementation
+      - cli
+    due: 2026-11-09
+    created: 2026-11-08T19:15:00Z
+
+  - id: write-tests
+    title: Write comprehensive unit tests
+    description: Cover all CLI operations, edge cases, and error conditions
+    priority: high
+    status: pending
+    assignee:
+      kind: agent
+      agent_type: test-runner
+    depends_on:
+      - implement-cli
+    files:
+      - path: .ci_scripts/test_todos.py
+        op: create
+        reason: Offline unit tests for validation
+    acceptance_criteria:
+      - Tests run offline without external dependencies
+      - Cover schema validation and example validity
+      - Test all filter types and sort orders
+      - Verify comment preservation and atomic writes
+      - Test dependency pruning on clean
+    tags:
+      - testing
+      - quality
+    created: 2026-11-08T19:20:00Z
+
+  - id: document-skill
+    title: Write SKILL.md with frontmatter and instructions
+    priority: medium
+    status: pending
+    assignee:
+      kind: agent
+      agent_type: docs-writer
+    depends_on:
+      - implement-cli
+      - write-tests
+    files:
+      - path: skills/yaml-todos/SKILL.md
+        op: create
+      - path: skills/README.md
+        op: update
+        reason: Add skill to index
+    acceptance_criteria:
+      - Frontmatter matches directory name
+      - Clear description of when to use
+      - Instructions reference schema and scripts
+      - Added to correct category in skills index
+    tags:
+      - documentation
+    created: 2026-11-08T19:25:00Z
+
+  - id: archived-task
+    title: This task was completed and will be cleaned
+    status: done
+    priority: low
+    assignee:
+      kind: human
+    created: 2026-11-01T10:00:00Z
+    completed: 2026-11-01T12:00:00Z
+    notes: This demonstrates a completed task that todos-clean would remove

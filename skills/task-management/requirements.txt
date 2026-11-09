@@ -1,0 +1,8 @@
+# Required dependencies for task-management skill
+# Install with: pip install -r skills/task-management/requirements.txt
+
+# YAML parsing with comment preservation (required)
+ruamel.yaml>=0.18
+
+# JSON Schema validation (required)
+jsonschema>=4.20

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Task Management"
+  short_description: "Track and manage structured todo lists with priorities and assignees"
+  default_prompt: "Use $task-management to maintain a structured YAML todo file with priority-based listing and automated cleanup of completed tasks."
