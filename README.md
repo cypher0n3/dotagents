@@ -239,8 +239,8 @@ Current compatibility boundaries are deliberate:
   Until Xorc ships that, Xorc does not see these agents.
 - Xorc does not enforce `user-invocable` or `disable-model-invocation` as activation policy, and `allowed-tools` declarations do not grant or restrict authority.
   Skill prose does not replace host-side approvals or sandbox policy.
-- [`detailed-execution-planner`](skills/detailed-execution-planner/SKILL.md) selects a native Xorc planning workflow separately from Cursor's plan format.
-  [`update-cursor-todos`](skills/update-cursor-todos/SKILL.md) remains Cursor-only.
+- [`detailed-execution-planner`](skills/detailed-execution-planner/SKILL.md) selects a native Xorc planning workflow or a frontmatter-free Claude Code plan separately from Cursor's plan format.
+  [`update-todos`](skills/update-todos/SKILL.md) updates status for all three plan types, and for Xorc only through its native plan tools.
 
 Xorc's shared-configuration proposal, draft 470, is deferred; this integration does not depend on its proposed runtime adapters or configuration keys.
 [Shared Agent Templates](docs/specs/shared-agent-templates.md) specifies how each tool's agents come from the shared sources.
