@@ -1,0 +1,4 @@
+interface:
+  display_name: "Update Todos"
+  short_description: "Reconcile plan and todo status"
+  default_prompt: "Use $update-todos to reconcile the plan and its todo items with the work actually completed."
