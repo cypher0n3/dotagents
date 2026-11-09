@@ -23,6 +23,7 @@ check:skills:
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends ca-certificates git jq just
     - pip install --root-user-action=ignore --no-cache-dir skills-ref==0.1.1
+    - pip install --root-user-action=ignore --no-cache-dir -r skills/task-management/requirements.txt
   script:
     # Agents are generated first, because nothing generated is committed.
     - just generate-agents validate-skills validate-skills-spec validate-agents validate-doc-links test-python
@@ -33,6 +34,7 @@ check:python-lint:
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends ca-certificates git just
     - pip install --root-user-action=ignore --no-cache-dir -r .ci_scripts/requirements-lint.txt
+    - pip install --root-user-action=ignore --no-cache-dir -r skills/task-management/requirements.txt
   script:
     - just lint-python
 

@@ -42,6 +42,8 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Install the Agent Skills reference validator
         run: pip install --root-user-action=ignore --no-cache-dir skills-ref==0.1.1
+      - name: Install skill dependencies
+        run: pip install --root-user-action=ignore --no-cache-dir -r skills/task-management/requirements.txt
       # Agents are generated first, because nothing generated is committed.
       - name: Validate and test
         run: just generate-agents validate-skills validate-skills-spec validate-agents validate-doc-links test-python
@@ -58,6 +60,8 @@ jobs:
           persist-credentials: false
       - name: Install the Python lint tools
         run: pip install --root-user-action=ignore --no-cache-dir -r .ci_scripts/requirements-lint.txt
+      - name: Install skill dependencies
+        run: pip install --root-user-action=ignore --no-cache-dir -r skills/task-management/requirements.txt
       - name: Lint Python
         run: just lint-python
 
