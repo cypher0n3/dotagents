@@ -102,7 +102,8 @@ validate-skills-spec:
 validate-doc-links:
     @python3 "{{ root_dir }}/.ci_scripts/validate_doc_links.py" "{{ root_dir }}"
 
-# Create .venv and install the Python lint tools from .ci_scripts/requirements-lint.txt.
+# Create .venv and install the Python lint tools from .ci_scripts/requirements-lint.txt
+# and the dependencies the skill tests need.
 venv:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -111,8 +112,8 @@ venv:
     python=.venv/bin/python
     [ -x "$python" ] || python=.venv/Scripts/python
     "$python" -m pip install --quiet --upgrade pip
-    "$python" -m pip install --quiet -r .ci_scripts/requirements-lint.txt
-    echo "Python lint tools installed in .venv."
+    "$python" -m pip install --quiet -r .ci_scripts/requirements-lint.txt -r skills/task-management/requirements.txt
+    echo "Python lint tools and skill dependencies installed in .venv."
 
 # Lint every Python root: flake8 (style), pylint, xenon (per-function complexity),
 # radon (per-file maintainability), vulture (dead code), and bandit (security).
@@ -160,10 +161,15 @@ lint-python:
 
 # Check that every tracked Python file is linted, compile everything, and run the
 # offline unit tests, except the PowerShell installer tests (see test-powershell).
+# Uses .venv when present, else python3 on PATH; run `just venv` to install the
+# skill dependencies the tests import.
 test-python:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{ root_dir }}"
+    for bin in .venv/bin .venv/Scripts; do
+        if [ -d "$bin" ]; then PATH="$PWD/$bin:$PATH"; fi
+    done
     python3 .ci_scripts/python_quality_gate.py
     read -r -a roots <<< "{{ python_roots }}"
     python3 -m compileall -q "${roots[@]}"

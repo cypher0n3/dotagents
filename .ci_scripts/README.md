@@ -62,6 +62,7 @@ The junction-migration test only runs on Windows, since junctions do not exist e
 - `bandit`, configured by [`bandit.yaml`](../bandit.yaml), for security issues.
 
 `just venv` installs the tools from [`requirements-lint.txt`](requirements-lint.txt) into `.venv`, which the recipe uses when present; `just setup` runs it.
+It also installs [`skills/task-management/requirements.txt`](../skills/task-management/requirements.txt), which `just test-python` needs, and that recipe likewise uses `.venv` when present.
 The thresholds and tools follow Xorc's Python gates.
 
 ## Conventions
