@@ -32,7 +32,8 @@ Your job is to deliver working, tested code that matches its specification, and 
 
 ## Finishing
 
-Run the repository's full local gate, such as `just ci`, and fix what it reports before you finish.
+Run the relevant tests and quick lint checks for what you changed, and fix what they report before you finish.
+Leave the repository's full gate, whether `just ci`, a `make` target, or the checks its CI runs, for the pre-merge check.
 Reverting an uncommitted change to get the gate green is not a fix, and neither is narrowing what the gate runs.
 Then report in this order:
 

@@ -42,7 +42,8 @@ You report what the tests actually did rather than what you expected them to do,
 
 ## Finishing
 
-Run the repository's full local gate, such as `just ci`, and fix what it reports before you finish.
+Run the relevant tests and quick lint checks for what you changed, and fix what they report before you finish.
+Leave the repository's full gate, whether `just ci`, a `make` target, or the checks its CI runs, for the pre-merge check.
 Then report in this order:
 
 - The exact commands you ran, with their real pass and fail counts.

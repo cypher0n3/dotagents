@@ -114,7 +114,7 @@ An agent here must work in any repository it is started in.
 
 ## Validation
 
-Run the full local gate before committing an agent change.
+While working on an agent, run the quick checks below that cover it; run `just ci` as the pre-merge check.
 
 - `just generate-agents` validates every source file and generates every tool's agents from them.
 - `just validate-agents` generates, then checks the Claude Code agents' frontmatter, naming, model, color, effort and tool values, preloaded skills, the body opening, comments, and the index.

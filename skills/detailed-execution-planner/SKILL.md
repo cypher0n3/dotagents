@@ -32,6 +32,7 @@ If those signals conflict or establish no target, ask rather than guessing or co
 5. Make each task self-contained, with its own Requirements and Specifications list, Discovery, Red, Green, Refactor, Testing, and Closeout, so it can be executed and validated on its own.
 6. For code changes, use BDD/TDD: update behavior specs first, write failing tests, make the smallest change that passes them, refactor only when green, and add functional tests for user-facing or API-facing behavior.
 7. End each phase with a validation gate and an explicit hold point, such as "do not start the next task until this passes".
+   Gates run the relevant tests and quick lint checks; full test and CI runs, such as `just ci`, belong to the closeout task as the pre-merge check.
 8. Cite, for every acceptance or completion criterion, the owner decision or canonical requirement that sets it; add no criterion without one.
 9. When updating a plan, read all of it first, keep completed steps and their evidence unless now invalid, place new steps in the right task and phase, and revise only what is pending or invalidated.
 10. Leave out filler sections, generic advice, and narrative.
