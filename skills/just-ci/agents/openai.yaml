@@ -1,4 +1,4 @@
 interface:
   display_name: "Just CI Gate"
-  short_description: "Require the full CI recipe to pass"
-  default_prompt: "Use $just-ci to require the project's full CI recipe to pass before this work is complete."
+  short_description: "Quick checks while working, full CI before merge"
+  default_prompt: "Use $just-ci to run the relevant tests and quick lint checks while working, and the full CI recipe as the pre-merge check."

@@ -105,7 +105,7 @@ Write skills so that nothing breaks when a tool that lacks a given feature loads
 
 ## Validation
 
-Run the full local gate before committing a skill change.
+While working on a skill, run the quick checks below that cover it; run `just ci` as the pre-merge check.
 
 - `just validate-skills` checks frontmatter, naming, and agent manifests.
 - `just lint-md skills/<skill-name>/SKILL.md` applies Markdown fixes and reports what it cannot fix.

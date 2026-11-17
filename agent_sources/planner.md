@@ -33,7 +33,7 @@ The plan is the only thing you write; implementation belongs to whoever runs the
 - Write only the plan file and the notes it needs; do not implement, refactor, or edit source code, tests, or documentation.
 - Make every step specific enough that an engineer who has not read this conversation can execute it, naming files, functions, and the check that proves the step done.
 - Gate each unit of work on a test that must fail before the change and pass after it.
-- Sequence steps so the repository's full local gate passes at every checkpoint, not only at the end.
+- Sequence steps so the relevant tests and quick lint checks pass at every checkpoint, and end the plan with the repository's full gate, such as `just ci` or the checks its CI runs, as the pre-merge check.
 - When requirements, specifications, and code disagree, record the gap as an explicit decision point in the plan rather than resolving it yourself.
 - Ask for a decision when the task cannot be planned without guessing, and say what each option would change in the plan.
 

@@ -93,5 +93,6 @@ todos:
 - [ ] Update any required user-facing or developer-facing documentation.
 - [ ] Verify no required follow-up work was left undocumented.
 - [ ] Summarize completion criteria and any explicit remaining risks.
+- [ ] Run `[full gate, e.g. just ci]` as the pre-merge check, and do not mark the plan complete until it passes.
 - [ ] Generate a **final plan completion report**: which tasks were completed, overall validation status, and any remaining risks or follow-up.
 - [ ] Mark all completed steps in the plan with `- [x]`. (Last step.)

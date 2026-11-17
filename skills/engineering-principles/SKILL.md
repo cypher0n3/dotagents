@@ -209,6 +209,7 @@ A repository's own conventions and the user's direct instruction override these 
 
 Make BDD acceptance scenarios independent tests with their own in-process steps that assert the observable effect.
 Expose `just ci` as the single full gate in every repository.
+While working, run the relevant tests and quick lint checks that run locally without excessive time; full test and CI runs are the pre-merge check.
 Run a gate as its own shell call and read its exit status; do not pipe it into tail, head, or grep, or chain it into a commit.
 
 ### Configuration Precedence
