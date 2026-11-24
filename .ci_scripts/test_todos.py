@@ -14,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "task-managemen
 
 import todos  # noqa: E402
 
+from todos_lib import advanced_commands, basic_commands, io_ops, list_show, models, update_command  # noqa: E402
+
 
 SCHEMA_PATH = Path(__file__).parent.parent / "skills" / "task-management" / "assets" / "todos-schema.json"
 EXAMPLE_PATH = Path(__file__).parent.parent / "skills" / "task-management" / "assets" / "todos-example.yaml"
@@ -134,29 +136,29 @@ class TodosSchemaTest(unittest.TestCase):
 
     def test_example_validates_against_schema(self) -> None:
         """Example YAML file validates against the schema."""
-        data = todos.load_yaml(EXAMPLE_PATH)
-        todos.validate_schema(data, SCHEMA_PATH)
+        data = io_ops.load_yaml(EXAMPLE_PATH)
+        io_ops.validate_schema(data, SCHEMA_PATH)
 
 
 class ParseDatetimeTest(unittest.TestCase):
     """Test datetime parsing from various formats."""
 
     def test_none_returns_none(self) -> None:
-        self.assertIsNone(todos.parse_datetime(None))
+        self.assertIsNone(models.parse_datetime(None))
 
     def test_iso_with_z(self) -> None:
-        dt = todos.parse_datetime("2026-11-08T19:00:00Z")
+        dt = models.parse_datetime("2026-11-08T19:00:00Z")
         self.assertIsNotNone(dt)
         self.assertEqual(dt.year, 2026)
         self.assertIsNotNone(dt.tzinfo)
 
     def test_iso_with_offset(self) -> None:
-        dt = todos.parse_datetime("2026-11-08T19:00:00-05:00")
+        dt = models.parse_datetime("2026-11-08T19:00:00-05:00")
         self.assertIsNotNone(dt)
         self.assertIsNotNone(dt.tzinfo)
 
     def test_date_only(self) -> None:
-        dt = todos.parse_datetime("2026-11-08")
+        dt = models.parse_datetime("2026-11-08")
         self.assertIsNotNone(dt)
         self.assertEqual(dt.year, 2026)
         self.assertEqual(dt.month, 11)
@@ -164,13 +166,13 @@ class ParseDatetimeTest(unittest.TestCase):
 
     def test_datetime_object_naive(self) -> None:
         naive = datetime(2026, 11, 8, 19, 0, 0)
-        dt = todos.parse_datetime(naive)
+        dt = models.parse_datetime(naive)
         self.assertIsNotNone(dt)
         self.assertIsNotNone(dt.tzinfo)
 
     def test_datetime_object_aware(self) -> None:
         aware = datetime(2026, 11, 8, 19, 0, 0, tzinfo=timezone.utc)
-        dt = todos.parse_datetime(aware)
+        dt = models.parse_datetime(aware)
         self.assertEqual(dt, aware)
 
 
@@ -184,7 +186,7 @@ class ParseTodoTest(unittest.TestCase):
             "status": "pending",
             "assignee": {"kind": "human"},
         }
-        todo = todos.parse_todo(raw)
+        todo = models.parse_todo(raw)
         self.assertEqual(todo.id, "task-1")
         self.assertEqual(todo.assignee_kind, "human")
         self.assertEqual(todo.assignee_display, "human")
@@ -196,7 +198,7 @@ class ParseTodoTest(unittest.TestCase):
             "status": "pending",
             "assignee": {"kind": "human", "name": "Alice"},
         }
-        todo = todos.parse_todo(raw)
+        todo = models.parse_todo(raw)
         self.assertEqual(todo.assignee_display, "human:Alice")
 
     def test_agent_assignee(self) -> None:
@@ -206,7 +208,7 @@ class ParseTodoTest(unittest.TestCase):
             "status": "pending",
             "assignee": {"kind": "agent", "agent_type": "coder"},
         }
-        todo = todos.parse_todo(raw)
+        todo = models.parse_todo(raw)
         self.assertEqual(todo.assignee_kind, "agent")
         self.assertEqual(todo.assignee_display, "agent:coder")
 
@@ -217,7 +219,7 @@ class ParseTodoTest(unittest.TestCase):
             "status": "pending",
             "assignee": {"kind": "human"},
         }
-        todo = todos.parse_todo(raw)
+        todo = models.parse_todo(raw)
         self.assertEqual(todo.priority, "medium")
 
     def test_blocked_reason_captured(self) -> None:
@@ -228,7 +230,7 @@ class ParseTodoTest(unittest.TestCase):
             "assignee": {"kind": "human"},
             "blocked_reason": "Waiting for review",
         }
-        todo = todos.parse_todo(raw)
+        todo = models.parse_todo(raw)
         self.assertEqual(todo.blocked_reason, "Waiting for review")
 
 
@@ -237,11 +239,11 @@ class PrioritySortTest(unittest.TestCase):
 
     def test_priority_order(self) -> None:
         priorities = ["low", "medium", "high", "critical"]
-        keys = [todos.priority_sort_key(p) for p in priorities]
+        keys = [models.priority_sort_key(p) for p in priorities]
         self.assertEqual(keys, [3, 2, 1, 0])
 
     def test_unknown_priority_defaults_to_medium(self) -> None:
-        self.assertEqual(todos.priority_sort_key("unknown"), 2)
+        self.assertEqual(models.priority_sort_key("unknown"), 2)
 
 
 class ListTodosTest(unittest.TestCase):
@@ -260,32 +262,32 @@ class ListTodosTest(unittest.TestCase):
 
     def test_list_all_shows_open_statuses_only(self) -> None:
         path = self.write_file(MULTI_STATUS)
-        result = todos.list_todos(path, "all")
+        result = list_show.list_todos(path, "all")
         self.assertEqual(result, 0)
 
     def test_list_human_filters_correctly(self) -> None:
         path = self.write_file(MULTI_STATUS)
-        result = todos.list_todos(path, "human")
+        result = list_show.list_todos(path, "human")
         self.assertEqual(result, 0)
 
     def test_list_agent_filters_correctly(self) -> None:
         path = self.write_file(MULTI_STATUS)
-        result = todos.list_todos(path, "agent")
+        result = list_show.list_todos(path, "agent")
         self.assertEqual(result, 0)
 
     def test_missing_file_returns_error(self) -> None:
         path = self.root / "nonexistent.yaml"
-        result = todos.list_todos(path, "all")
+        result = list_show.list_todos(path, "all")
         self.assertEqual(result, 1)
 
     def test_invalid_yaml_returns_error(self) -> None:
         path = self.write_file("{ invalid yaml")
-        result = todos.list_todos(path, "all")
+        result = list_show.list_todos(path, "all")
         self.assertEqual(result, 1)
 
     def test_missing_todos_array_returns_error(self) -> None:
         path = self.write_file("meta:\n  title: Test\n")
-        result = todos.list_todos(path, "all")
+        result = list_show.list_todos(path, "all")
         self.assertEqual(result, 1)
 
     def test_empty_result_succeeds(self) -> None:
@@ -298,7 +300,7 @@ todos:
       kind: human
     completed: 2026-11-01T10:00:00Z
 """)
-        result = todos.list_todos(path, "all")
+        result = list_show.list_todos(path, "all")
         self.assertEqual(result, 0)
 
 
@@ -318,10 +320,10 @@ class CleanTodosTest(unittest.TestCase):
 
     def test_clean_removes_done_only(self) -> None:
         path = self.write_file(MULTI_STATUS)
-        result = todos.clean_todos(path, dry_run=False)
+        result = advanced_commands.clean_todos(path, dry_run=False)
         self.assertEqual(result, 0)
 
-        data = todos.load_yaml(path)
+        data = io_ops.load_yaml(path)
         remaining_ids = {t["id"] for t in data["todos"]}
         self.assertNotIn("done-1", remaining_ids)
         self.assertIn("cancelled-1", remaining_ids)
@@ -331,41 +333,40 @@ class CleanTodosTest(unittest.TestCase):
 
     def test_clean_prunes_dependencies(self) -> None:
         path = self.write_file(DEPENDENCIES)
-        result = todos.clean_todos(path, dry_run=False)
+        result = advanced_commands.clean_todos(path, dry_run=False)
         self.assertEqual(result, 0)
 
-        data = todos.load_yaml(path)
+        data = io_ops.load_yaml(path)
         dependent_1 = next(t for t in data["todos"] if t["id"] == "dependent-1")
         self.assertNotIn("base-task", dependent_1["depends_on"])
         self.assertIn("other-task", dependent_1["depends_on"])
 
         dependent_2 = next(t for t in data["todos"] if t["id"] == "dependent-2")
-        self.assertNotIn("base-task", dependent_2["depends_on"])
-        self.assertEqual(len(dependent_2["depends_on"]), 0)
+        self.assertNotIn("depends_on", dependent_2)
 
     def test_dry_run_writes_nothing(self) -> None:
         path = self.write_file(MULTI_STATUS)
         original = path.read_text()
-        result = todos.clean_todos(path, dry_run=True)
+        result = advanced_commands.clean_todos(path, dry_run=True)
         self.assertEqual(result, 0)
         self.assertEqual(path.read_text(), original)
 
     def test_no_done_todos_succeeds(self) -> None:
         path = self.write_file(MINIMAL_VALID)
-        result = todos.clean_todos(path, dry_run=False)
+        result = advanced_commands.clean_todos(path, dry_run=False)
         self.assertEqual(result, 0)
 
     def test_atomic_write_preserves_permissions(self) -> None:
         path = self.write_file(MULTI_STATUS)
         original_mode = path.stat().st_mode
-        result = todos.clean_todos(path, dry_run=False)
+        result = advanced_commands.clean_todos(path, dry_run=False)
         self.assertEqual(result, 0)
         self.assertEqual(path.stat().st_mode, original_mode)
 
     def test_comments_preserved(self) -> None:
         """Comments are preserved during cleanup."""
         path = self.write_file(COMMENTS_YAML)
-        result = todos.clean_todos(path, dry_run=False)
+        result = advanced_commands.clean_todos(path, dry_run=False)
         self.assertEqual(result, 0)
 
         cleaned = path.read_text()
@@ -378,12 +379,12 @@ class CleanTodosTest(unittest.TestCase):
 
     def test_missing_file_returns_error(self) -> None:
         path = self.root / "nonexistent.yaml"
-        result = todos.clean_todos(path, dry_run=False)
+        result = advanced_commands.clean_todos(path, dry_run=False)
         self.assertEqual(result, 1)
 
     def test_unchanged_file_not_rewritten(self) -> None:
         path = self.write_file(MINIMAL_VALID)
-        result = todos.clean_todos(path, dry_run=False)
+        result = advanced_commands.clean_todos(path, dry_run=False)
         self.assertEqual(result, 0)
 
     def test_symlink_write_preserves_link(self) -> None:
@@ -394,7 +395,7 @@ class CleanTodosTest(unittest.TestCase):
 
         # Verify we can read through the symlink
         self.assertTrue(link.is_symlink())
-        result = todos.list_todos(link, "all")
+        result = list_show.list_todos(link, "all")
         self.assertEqual(result, 0)
 
         # Add a task through the symlink
@@ -408,10 +409,10 @@ class CleanTodosTest(unittest.TestCase):
             assignee_kind=None,
             assignee_name=None,
             agent_type=None,
-            depends_on=None,
+            add_depends_on=None,
             parent=None,
         )
-        result = todos.add_todo(link, args, dry_run=False)
+        result = basic_commands.add_todo(link, args, dry_run=False)
         self.assertEqual(result, 0)
 
         # Verify the link is still a symlink
@@ -419,7 +420,7 @@ class CleanTodosTest(unittest.TestCase):
         self.assertEqual(link.resolve(), target.resolve())
 
         # Verify the target was updated
-        data = todos.load_yaml(target)
+        data = io_ops.load_yaml(target)
         self.assertEqual(len(data["todos"]), 2)
         self.assertEqual(data["todos"][1]["title"], "New task via symlink")
 
@@ -439,7 +440,7 @@ todos:
       kind: human
 """
         path = self.write_file(duplicate)
-        result = todos.list_todos(path, "all")
+        result = list_show.list_todos(path, "all")
         self.assertEqual(result, 1)
 
     def test_schema_invalid_blocks_write(self) -> None:
@@ -457,7 +458,7 @@ todos:
     status: invalid_status_not_in_enum
 """
         path = self.write_file(invalid)
-        result = todos.clean_todos(path, dry_run=False)
+        result = advanced_commands.clean_todos(path, dry_run=False)
         self.assertEqual(result, 1)
 
 
@@ -482,13 +483,13 @@ todos:
 """
         path = self.root / "todos.yaml"
         path.write_text(data, encoding="utf-8")
-        result = todos.show_todo(path, "parent-1")
+        result = list_show.show_todo(path, "parent-1")
         self.assertEqual(result, 0)
 
     def test_show_nonexistent_task_returns_error(self) -> None:
         path = self.root / "todos.yaml"
         path.write_text(MINIMAL_VALID, encoding="utf-8")
-        result = todos.show_todo(path, "nonexistent")
+        result = list_show.show_todo(path, "nonexistent")
         self.assertEqual(result, 1)
 
 
@@ -514,13 +515,13 @@ class AddTodoTest(unittest.TestCase):
             assignee_kind=None,
             assignee_name=None,
             agent_type=None,
-            depends_on=None,
+            add_depends_on=None,
             parent=None,
         )
-        result = todos.add_todo(path, args, dry_run=False)
+        result = basic_commands.add_todo(path, args, dry_run=False)
         self.assertEqual(result, 0)
 
-        data = todos.load_yaml(path)
+        data = io_ops.load_yaml(path)
         self.assertEqual(len(data["todos"]), 1)
         self.assertEqual(data["todos"][0]["title"], "New task")
         self.assertIn("id", data["todos"][0])
@@ -539,13 +540,13 @@ class AddTodoTest(unittest.TestCase):
             assignee_kind=None,
             assignee_name=None,
             agent_type=None,
-            depends_on=None,
+            add_depends_on=None,
             parent=None,
         )
-        result = todos.add_todo(path, args, dry_run=False)
+        result = basic_commands.add_todo(path, args, dry_run=False)
         self.assertEqual(result, 0)
 
-        data = todos.load_yaml(path)
+        data = io_ops.load_yaml(path)
         generated_id = data["todos"][0]["id"]
         self.assertTrue(generated_id.startswith("fix-critical-bug"))
 
@@ -569,13 +570,13 @@ todos:
             assignee_kind=None,
             assignee_name=None,
             agent_type=None,
-            depends_on=None,
+            add_depends_on=None,
             parent="parent-1",
         )
-        result = todos.add_todo(path, args, dry_run=False)
+        result = basic_commands.add_todo(path, args, dry_run=False)
         self.assertEqual(result, 0)
 
-        loaded = todos.load_yaml(path)
+        loaded = io_ops.load_yaml(path)
         self.assertIn("subtasks", loaded["todos"][0])
         self.assertEqual(len(loaded["todos"][0]["subtasks"]), 1)
         self.assertEqual(loaded["todos"][0]["subtasks"][0]["id"], "child-1")
@@ -594,10 +595,10 @@ todos:
             assignee_kind=None,
             assignee_name=None,
             agent_type=None,
-            depends_on=None,
+            add_depends_on=None,
             parent=None,
         )
-        result = todos.add_todo(path, args, dry_run=False)
+        result = basic_commands.add_todo(path, args, dry_run=False)
         self.assertEqual(result, 1)
 
     def test_add_dry_run(self) -> None:
@@ -614,13 +615,13 @@ todos:
             assignee_kind=None,
             assignee_name=None,
             agent_type=None,
-            depends_on=None,
+            add_depends_on=None,
             parent=None,
         )
-        result = todos.add_todo(path, args, dry_run=True)
+        result = basic_commands.add_todo(path, args, dry_run=True)
         self.assertEqual(result, 0)
 
-        data = todos.load_yaml(path)
+        data = io_ops.load_yaml(path)
         self.assertEqual(len(data["todos"]), 0)
 
 
@@ -644,10 +645,10 @@ class UpdateTodoTest(unittest.TestCase):
             description=None,
             blocked_reason=None,
         )
-        result = todos.update_todo(path, "task-1", args, dry_run=False)
+        result = update_command.update_todo(path, "task-1", args, dry_run=False)
         self.assertEqual(result, 0)
 
-        data = todos.load_yaml(path)
+        data = io_ops.load_yaml(path)
         self.assertEqual(data["todos"][0]["status"], "in_progress")
 
     def test_update_status_to_done_adds_completed(self) -> None:
@@ -662,10 +663,10 @@ class UpdateTodoTest(unittest.TestCase):
             description=None,
             blocked_reason=None,
         )
-        result = todos.update_todo(path, "task-1", args, dry_run=False)
+        result = update_command.update_todo(path, "task-1", args, dry_run=False)
         self.assertEqual(result, 0)
 
-        data = todos.load_yaml(path)
+        data = io_ops.load_yaml(path)
         self.assertEqual(data["todos"][0]["status"], "done")
         self.assertIn("completed", data["todos"][0])
 
@@ -681,7 +682,7 @@ class UpdateTodoTest(unittest.TestCase):
             description=None,
             blocked_reason=None,
         )
-        result = todos.update_todo(path, "nonexistent", args, dry_run=False)
+        result = update_command.update_todo(path, "nonexistent", args, dry_run=False)
         self.assertEqual(result, 1)
 
 
@@ -697,10 +698,10 @@ class RemoveTodoTest(unittest.TestCase):
         path = self.root / "todos.yaml"
         path.write_text(MINIMAL_VALID, encoding="utf-8")
 
-        result = todos.remove_todo(path, "task-1", recursive=False, dry_run=False)
+        result = basic_commands.remove_todo(path, "task-1", recursive=False, dry_run=False)
         self.assertEqual(result, 0)
 
-        data = todos.load_yaml(path)
+        data = io_ops.load_yaml(path)
         self.assertEqual(len(data["todos"]), 0)
 
     def test_remove_task_with_subtasks_without_recursive_fails(self) -> None:
@@ -717,7 +718,7 @@ todos:
         path = self.root / "todos.yaml"
         path.write_text(data, encoding="utf-8")
 
-        result = todos.remove_todo(path, "parent-1", recursive=False, dry_run=False)
+        result = basic_commands.remove_todo(path, "parent-1", recursive=False, dry_run=False)
         self.assertEqual(result, 1)
 
     def test_remove_task_with_subtasks_recursively(self) -> None:
@@ -734,10 +735,10 @@ todos:
         path = self.root / "todos.yaml"
         path.write_text(data, encoding="utf-8")
 
-        result = todos.remove_todo(path, "parent-1", recursive=True, dry_run=False)
+        result = basic_commands.remove_todo(path, "parent-1", recursive=True, dry_run=False)
         self.assertEqual(result, 0)
 
-        loaded = todos.load_yaml(path)
+        loaded = io_ops.load_yaml(path)
         self.assertEqual(len(loaded["todos"]), 0)
 
     def test_remove_prunes_dependencies(self) -> None:
@@ -755,10 +756,10 @@ todos:
         path = self.root / "todos.yaml"
         path.write_text(data, encoding="utf-8")
 
-        result = todos.remove_todo(path, "task-1", recursive=False, dry_run=False)
+        result = basic_commands.remove_todo(path, "task-1", recursive=False, dry_run=False)
         self.assertEqual(result, 0)
 
-        loaded = todos.load_yaml(path)
+        loaded = io_ops.load_yaml(path)
         self.assertNotIn("depends_on", loaded["todos"][0])
 
 
@@ -784,10 +785,10 @@ todos:
         path = self.root / "todos.yaml"
         path.write_text(data, encoding="utf-8")
 
-        result = todos.move_todo(path, "child-1", parent_id=None, to_root=True, dry_run=False)
+        result = advanced_commands.move_todo(path, "child-1", parent_id=None, to_root=True, dry_run=False)
         self.assertEqual(result, 0)
 
-        loaded = todos.load_yaml(path)
+        loaded = io_ops.load_yaml(path)
         self.assertEqual(len(loaded["todos"]), 2)
         self.assertNotIn("subtasks", loaded["todos"][0])
 
@@ -804,10 +805,10 @@ todos:
         path = self.root / "todos.yaml"
         path.write_text(data, encoding="utf-8")
 
-        result = todos.move_todo(path, "task-1", parent_id="parent-1", to_root=False, dry_run=False)
+        result = advanced_commands.move_todo(path, "task-1", parent_id="parent-1", to_root=False, dry_run=False)
         self.assertEqual(result, 0)
 
-        loaded = todos.load_yaml(path)
+        loaded = io_ops.load_yaml(path)
         self.assertEqual(len(loaded["todos"]), 1)
         self.assertIn("subtasks", loaded["todos"][0])
         self.assertEqual(loaded["todos"][0]["subtasks"][0]["id"], "task-1")
@@ -836,10 +837,10 @@ todos:
         path = self.root / "todos.yaml"
         path.write_text(data, encoding="utf-8")
 
-        result = todos.clean_todos(path, dry_run=False)
+        result = advanced_commands.clean_todos(path, dry_run=False)
         self.assertEqual(result, 0)
 
-        loaded = todos.load_yaml(path)
+        loaded = io_ops.load_yaml(path)
         self.assertEqual(len(loaded["todos"]), 1)
         self.assertEqual(loaded["todos"][0]["id"], "parent-1")
 
@@ -859,10 +860,10 @@ todos:
         path = self.root / "todos.yaml"
         path.write_text(data, encoding="utf-8")
 
-        result = todos.clean_todos(path, dry_run=False)
+        result = advanced_commands.clean_todos(path, dry_run=False)
         self.assertEqual(result, 0)
 
-        loaded = todos.load_yaml(path)
+        loaded = io_ops.load_yaml(path)
         self.assertEqual(len(loaded["todos"]), 0)
 
 

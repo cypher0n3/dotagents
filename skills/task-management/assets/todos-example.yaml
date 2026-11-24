@@ -4,13 +4,6 @@ meta:
   title: Project Task Tracking
   created: 2026-11-08T19:00:00Z
   updated: 2026-11-08T19:30:00Z
-  notes:
-    project_overview: |
-      This file tracks tasks for implementing the YAML todos skill.
-      Tasks are assigned to humans or agent types, not specific agent instances.
-    workflow: |
-      Use todos-list to view open tasks by priority and age.
-      Use todos-clean to remove completed tasks and prune stale dependencies.
 
 todos:
   - id: design-schema
@@ -22,7 +15,7 @@ todos:
       kind: human
       name: G. Andre Vaillancourt
     files:
-      - path: skills/yaml-todos/assets/todos-schema.json
+      - path: skills/task-management/assets/todos-schema.json
         op: create
         reason: Define structure validation rules
     acceptance_criteria:
@@ -47,7 +40,7 @@ todos:
     depends_on:
       - design-schema
     files:
-      - path: skills/yaml-todos/scripts/todos.py
+      - path: skills/task-management/scripts/todos.py
         op: create
         reason: Main CLI implementation
     acceptance_criteria:
@@ -97,7 +90,7 @@ todos:
       - implement-cli
       - write-tests
     files:
-      - path: skills/yaml-todos/SKILL.md
+      - path: skills/task-management/SKILL.md
         op: create
       - path: skills/README.md
         op: update
@@ -119,4 +112,3 @@ todos:
       kind: human
     created: 2026-11-01T10:00:00Z
     completed: 2026-11-01T12:00:00Z
-    notes: This demonstrates a completed task that todos-clean would remove

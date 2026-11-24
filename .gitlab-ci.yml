@@ -26,7 +26,7 @@ check:skills:
     - pip install --root-user-action=ignore --no-cache-dir -r skills/task-management/requirements.txt
   script:
     # Agents are generated first, because nothing generated is committed.
-    - just generate-agents validate-skills validate-skills-spec validate-agents validate-doc-links test-python
+    - just generate-agents validate-skills validate-skills-spec validate-agents validate-doc-links test-python smoke-todos
 
 check:python-lint:
   stage: check
