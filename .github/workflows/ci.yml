@@ -46,7 +46,7 @@ jobs:
         run: pip install --root-user-action=ignore --no-cache-dir -r skills/task-management/requirements.txt
       # Agents are generated first, because nothing generated is committed.
       - name: Validate and test
-        run: just generate-agents validate-skills validate-skills-spec validate-agents validate-doc-links test-python
+        run: just generate-agents validate-skills validate-skills-spec validate-agents validate-doc-links test-python smoke-todos
 
   python-lint:
     name: Lint Python

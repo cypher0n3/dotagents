@@ -17,8 +17,10 @@ Commit the file alongside related changes.
 Change the task list only through the CLI; never edit the YAML file directly.
 The CLI validates before writing, preserving file integrity.
 
-Run `python3 scripts/todos.py list [all|human|agent|unassigned] --file PATH` to list open tasks.
+Run `python3 scripts/todos.py init --title "Title" --file PATH` to create the file.
+Run `python3 scripts/todos.py list [all|human|agent|unassigned] --file PATH` to list open tasks, or add `--status done` for finished ones.
 Run `python3 scripts/todos.py add "Task title" --file PATH` to add a task.
+Run `python3 scripts/todos.py update TASK_ID --file PATH` with field flags to change a task.
 Run `python3 scripts/todos.py done TASK_ID --file PATH` to mark a task done.
 Run `python3 scripts/todos.py --help` for all commands and `COMMAND --help` for options.
 

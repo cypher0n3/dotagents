@@ -22,7 +22,7 @@ setup: install-markdownlint venv
 
 # Local CI: everything that gates a merge in this repository. Agents are
 # generated first, so every later check sees the current generated files.
-ci: generate-agents docs-check validate-skills validate-agents validate-skills-spec lint-python test-python test-powershell lint-sh
+ci: generate-agents docs-check validate-skills validate-agents validate-skills-spec lint-python test-python smoke-todos test-powershell lint-sh
     @:
 
 # Generate every tool's agent files from agent_sources/ into generated/, which is not committed.
@@ -297,6 +297,10 @@ test-powershell-readonly:
         exit 1
     fi
 
+# Run every task-management CLI command end to end against a temporary file.
+smoke-todos:
+    .ci_scripts/smoke_todos.sh
+
 # Lint the repository's shell scripts (shellcheck). Skipped with a notice when shellcheck is absent.
 lint-sh:
     #!/usr/bin/env bash
@@ -306,7 +310,7 @@ lint-sh:
         echo "shellcheck not installed; skipping shell lint."
         exit 0
     fi
-    shellcheck scripts/*.sh claude/*.sh cursor/*.sh
+    shellcheck scripts/*.sh claude/*.sh cursor/*.sh .ci_scripts/*.sh
 
 # Generate the agents, link them, the skills, and the global AGENTS.md into each tool, and register Hermes skills and personalities.
 install *ARGS:
