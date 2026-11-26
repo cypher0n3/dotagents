@@ -1,0 +1,58 @@
+{
+  "claude": {
+    "frame_rule_regex": "^\\s*[─━]{20,}( [^─━]+ [─━]+)?\\s*$",
+    "idle_chrome_patterns": [
+      "^\\s*>\\s*$",
+      "^\\s*❯\\s*$",
+      "^\\s*❯\\s+Try \"[^\"]+\"\\s*$",
+      "^\\s*Model:\\s+[a-z0-9-]+\\s*$",
+      "^\\s*Context:\\s+\\d+%\\s+\\|\\s+\\d+/\\d+\\s+tokens\\s*$"
+    ],
+    "note": "Claude Code puts a named session's title into the top rule, e.g. '──── CONTROL ALPHA ─' (herdr 0.9.5, Nov 2026). A fresh session shows a suggestion placeholder in the box, e.g. '❯ Try \"write a test for <filepath>\"'."
+  },
+  "codex": {
+    "note": "Real Codex CLI screen (herdr 0.9.5, Nov 2026): no rule lines; the last › row is the input, then the model line and the shortcuts line. Only the verified placeholder counts as empty; any other placeholder refuses (fail closed).",
+    "prompt_regex": "^\\s*›(\\s|$)",
+    "idle_chrome_patterns": [
+      "^\\s*›\\s+Ask Codex to do anything\\s*$",
+      "^\\s*›\\s*$",
+      "^\\s*[A-Za-z0-9.-]+ (minimal|low|medium|high|xhigh)( · .+)? · Context \\d+% used( · .+)?$",
+      "^\\s*← for agents · \\? for shortcuts(\\s{2,}⚠ \\d+ warnings? · f2 to view)?\\s*$"
+    ]
+  },
+  "cursor": {
+    "note": "Real Cursor Agent CLI screen (herdr 0.9.5, Nov 2026): no rule lines; the last → row is the input, then blanks and the status bar.",
+    "prompt_regex": "^\\s*→(\\s|$)",
+    "idle_chrome_patterns": [
+      "^\\s*→\\s+Add a follow-up(\\s{2,}ctrl\\+c to stop)?\\s*$",
+      "^\\s*→\\s+Plan, search, build anything\\s*$",
+      "^\\s*→\\s*$",
+      "^\\s*\\[[^\\]]+\\](\\s+\\([^)]+\\))?\\s+\\{[^}]+\\}(\\s+\\|\\s+ctx\\s+[━╌]+\\s+\\d+%)?\\s+\\|\\s+models\\s+\\d+%\\s+used\\s+\\|\\s+api\\s+\\d+%\\s+used\\s*$"
+    ]
+  },
+  "agy": {
+    "frame_rule_regex": "^\\s*[─━=]{20,}\\s*$",
+    "idle_chrome_patterns": [
+      "^\\s*>\\s*$",
+      "^\\s*❯\\s*$",
+      "^\\s*>\\s+(Auto mode: edits & safe commands auto-approved|Plan mode: research & plan only|Accept-edits mode: file edits auto-approved) \\(shift\\+tab to cycle\\)\\s*$"
+    ]
+  },
+  "pi": {
+    "frame_rule_regex": "^\\s*[─━=]{20,}\\s*$",
+    "idle_chrome_patterns": [
+      "^\\s*>\\s*$",
+      "^\\s*❯\\s*$",
+      "^\\s*Model:\\s+[a-z0-9-]+\\s*$",
+      "^\\s*Context:\\s+\\d+%\\s+\\|\\s+\\d+/\\d+\\s+tokens\\s*$"
+    ]
+  },
+  "xorc": {
+    "note": "Herdr has no xorc kind; use --tui xorc explicitly",
+    "frame_rule_regex": "^\\s*[─━=]{20,}\\s*$",
+    "idle_chrome_patterns": [
+      "^\\s*>\\s*$",
+      "^\\s*❯\\s*$"
+    ]
+  }
+}

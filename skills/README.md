@@ -55,6 +55,7 @@ These skills shape how an agent plans work and reports back on it.
 - [`task-management`](task-management/SKILL.md) - Maintain structured todo lists in YAML format with human and agent assignees, priorities, dependencies, and validation.
 - [`grill-me`](grill-me/SKILL.md) - Prompt me with questions, one at a time, until we have a shared understanding.
 - [`agent-feedback`](agent-feedback/SKILL.md) *(user-invoked only)* - Quick prompt to indicate that the provided info was produced by another agent for consideration.
+- [`herdr`](herdr/SKILL.md) - Control Herdr panes, tabs, workspaces, and other agents, with a fail-closed send gate for cross-agent messages.
 
 ## Git Workflow
 
