@@ -1,0 +1,90 @@
+# Agent Kinds Configuration
+
+# This file defines agent-kind-specific behavior for task delivery and lifecycle management.
+# Location (planned): skills/agent-fleet/references/agent-kinds.yaml
+
+agent_kinds:
+  pi:
+    verified: true
+    task_commands:
+      new_precise: "/goal-direct {brief}"
+      new_draft: "/goal"
+      redirect_running: "/goal-tweak {guidance}"
+      resume_idle: "/goal-resume"
+    relaunch_command: "herdr agent start {name} --pane {pane} --kind pi -- --session {session_uuid}"
+    state_field: "agent_status"
+    notes: "Verified against pi runtime. All commands tested."
+
+  claude:
+    verified: false
+    task_commands:
+      new_precise: "/goal {brief}"
+      new_draft: "/goal {brief}"
+      redirect_running: "/goal {brief}"
+      resume_idle: "/goal resume"
+    relaunch_command: "herdr agent start {name} --pane {pane} --kind claude -- --session {session_uuid}"
+    state_field: "agent_status"
+    notes: "UNVERIFIED. Commands are templates to be confirmed during Phase 9."
+
+  codex:
+    verified: false
+    task_commands:
+      new_precise: "{brief}"
+      new_draft: "{brief}"
+      redirect_running: "{brief}"
+      resume_idle: "continue"
+    relaunch_command: "codex --session {session_uuid}"
+    state_field: "agent_status"
+    notes: "UNVERIFIED. Codex may use different command syntax. Confirm during Phase 9."
+
+  cursor:
+    verified: false
+    task_commands:
+      new_precise: "{brief}"
+      new_draft: "{brief}"
+      redirect_running: "{brief}"
+      resume_idle: "continue"
+    relaunch_command: "cursor-agent --session {session_uuid}"
+    state_field: "agent_status"
+    notes: "UNVERIFIED. Cursor may use different command syntax. Confirm during Phase 9."
+
+  agy:
+    verified: false
+    task_commands:
+      new_precise: "/goal {brief}"
+      new_draft: "/goal {brief}"
+      redirect_running: "/goal-tweak {guidance}"
+      resume_idle: "/goal resume"
+    relaunch_command: "herdr agent start {name} --pane {pane} --kind agy -- --session {session_uuid}"
+    state_field: "agent_status"
+    notes: "UNVERIFIED. Agy may accept mode hints as empty input. Confirm during Phase 9."
+
+  xorc:
+    verified: false
+    task_commands:
+      new_precise: "/goal {brief}"
+      new_draft: "/goal"
+      redirect_running: "/goal {brief}"
+      resume_idle: "continue"
+    relaunch_command: "xorc resume {session_uuid}"
+    state_field: "agent_status"
+    send_flags: "--tui xorc"
+    notes: "UNVERIFIED. Herdr has no xorc kind; sends require --tui xorc and go through pane run after checks. Task command is /goal from composer. TUI profile unverified on live pane. Confirm during Phase 9."
+
+# Field descriptions:
+#
+# verified: boolean - Whether the kind has been tested and confirmed working.
+#
+# task_commands: object - Command templates for task delivery.
+#   new_precise: Template for a new task with a precise brief.
+#   new_draft: Template for a new task where the agent drafts a plan first.
+#   redirect_running: Template for redirecting a running goal.
+#   resume_idle: Template for resuming an idle goal.
+#   Placeholders: {brief}, {guidance}
+#
+# relaunch_command: string - Template for relaunching with session continuity.
+#   Placeholders: {name}, {pane}, {session_uuid}
+#
+# state_field: string - Which herdr field holds the agent state.
+#
+# notes: string - Implementation notes and verification status.
