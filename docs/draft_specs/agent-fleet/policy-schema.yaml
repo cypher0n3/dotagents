@@ -1,0 +1,198 @@
+# Leader-Wake Policy Schema
+
+# This schema documents the configuration format for the leader-wake daemon.
+# Location: ~/.config/leader-wake/policy.yaml
+
+work_area:
+  type: string
+  required: true
+  description: Absolute path to the project work root containing agent_files/.
+
+target:
+  type: object
+  required: true
+  properties:
+    name:
+      type: string
+      required: true
+      description: Lead agent name or unique identifier for targeting.
+    workspace_id:
+      type: string
+      required: true
+      description: Herdr workspace ID where the lead runs.
+
+fleet:
+  type: object
+  required: true
+  properties:
+    workspace_id:
+      type: string
+      required: true
+      description: Herdr workspace ID where worker agents run.
+
+work:
+  type: object
+  required: true
+  properties:
+    todos:
+      type: string
+      required: true
+      description: Path to todos.yaml relative to work_area.
+    statuses:
+      type: array
+      items:
+        type: string
+      required: true
+      description: List of todo statuses considered actionable work.
+      default:
+        - pending
+        - in_progress
+        - blocked
+
+gates:
+  type: object
+  required: true
+  properties:
+    min_other_agents_working:
+      type: integer
+      minimum: 0
+      required: true
+      description: Minimum worker agents that should be running when actionable work exists.
+    running_review_max_agents:
+      type: integer
+      minimum: 0
+      required: true
+      description: Maximum worker agents running before running-review stops firing.
+
+stall:
+  type: object
+  required: true
+  properties:
+    seconds:
+      type: integer
+      minimum: 60
+      required: true
+      description: Seconds of unchanged output tail before stall-likely fires.
+    hash_lines:
+      type: integer
+      minimum: 1
+      required: true
+      description: Number of tail lines to hash for stall detection.
+    evidence_lines:
+      type: integer
+      minimum: 1
+      required: true
+      description: Number of tail lines to include as evidence in stall prompt.
+
+prompting:
+  type: object
+  required: true
+  properties:
+    cooldown_seconds:
+      type: integer
+      minimum: 0
+      required: true
+      description: Minimum seconds between prompts to the lead.
+    max_prompts_per_hour:
+      type: integer
+      minimum: 1
+      required: true
+      description: Maximum prompts delivered to lead in any rolling hour.
+    backlog_review_seconds:
+      type: integer
+      minimum: 60
+      required: true
+      description: Seconds between backlog-review prompts when no actionable work exists.
+    duty_seconds:
+      type: integer
+      minimum: 60
+      required: true
+      description: Seconds between hourly-duties checklist appends.
+    review_seconds:
+      type: integer
+      minimum: 60
+      required: true
+      description: Seconds between running-review prompts.
+    stuck_input_ticks:
+      type: integer
+      minimum: 1
+      required: true
+      description: Consecutive ticks with same unsubmitted input before stuck-input fires.
+
+tick_seconds:
+  type: integer
+  minimum: 10
+  required: true
+  description: Seconds between daemon ticks.
+
+prompt:
+  type: object
+  required: true
+  properties:
+    header:
+      type: string
+      required: true
+      description: Prompt header template with {reasons} placeholder.
+    verify_line:
+      type: string
+      required: true
+      description: Verification instruction for the lead about checking conditions.
+    hourly_duties:
+      type: string
+      required: true
+      description: Checklist appended when hourly-duties fires.
+    running_review:
+      type: string
+      required: true
+      description: Review recipe for each running agent.
+    board_blocked:
+      type: string
+      required: true
+      description: Instruction for board-blocked items.
+
+# Example policy:
+#
+# work_area: /home/user/projects/example
+# target:
+#   name: lead
+#   workspace_id: w1
+# fleet:
+#   workspace_id: w1
+# work:
+#   todos: agent_files/_todos/todos.yaml
+#   statuses:
+#     - pending
+#     - in_progress
+#     - blocked
+# gates:
+#   min_other_agents_working: 3
+#   running_review_max_agents: 3
+# stall:
+#   seconds: 1800
+#   hash_lines: 20
+#   evidence_lines: 6
+# prompting:
+#   cooldown_seconds: 300
+#   max_prompts_per_hour: 6
+#   backlog_review_seconds: 21600
+#   duty_seconds: 3600
+#   review_seconds: 3600
+#   stuck_input_ticks: 2
+# tick_seconds: 600
+# prompt:
+#   header: 'WAKE (leader-wake, auto): {reasons}'
+#   verify_line: |
+#     IDLE IS UNACCEPTABLE: any agent idle while a dispatchable unit exists
+#     (pending or blocked board items, evergreen pool, or any ungated part of a
+#     gated parent) makes THIS wake a failure until it is dispatched. Mine the
+#     live board and pool BEFORE writing any ledger; caps are enforced at dispatch time.
+#     The tool only detected conditions - verify before acting. After acting,
+#     update the todo board.
+#   hourly_duties: |
+#     Pane skim and paused-goal sweep, dispatch with preflight, worker caps
+#     per backend, scratch cleanup, todo-board status refresh.
+#   running_review: |
+#     Review recipe for each running agent: skim goal and recent output;
+#     off-track leads to goal redirect per agent-kinds.yaml (pi-only: /goal-tweak);
+#     long-running-no-progress leads to nudge toward the next concrete step, do not rewrite the task.
+#   board_blocked: 'Chase the blockers; update statuses after acting.'
