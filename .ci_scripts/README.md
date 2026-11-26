@@ -37,10 +37,13 @@ Run them with `just test-python`, which first runs the Python quality gate and c
 The installer tests are split by topic, with shared fixtures in a support module:
 `test_install_hermes.py`, `test_install_settings.py`, `test_install_links.py`, and `test_install_xorc.py` use [`install_test_support.py`](install_test_support.py), and the `test_install_powershell_*.py` files use [`powershell_test_support.py`](powershell_test_support.py).
 The generator tests share [`agent_test_support.py`](agent_test_support.py).
+The herdr_send tests (`test_herdr_checks.py`, `test_herdr_runner.py`, `test_herdr_message.py`, `test_herdr_cli.py`, `test_herdr_profiles.py`, `test_herdr_queue.py`) use [`herdr_test_support.py`](herdr_test_support.py).
 
 [`smoke_todos.sh`](smoke_todos.sh) runs every task-management CLI command and flag end to end against a temporary file, then validates the result against the schema.
 Run it with `just smoke-todos`; `just ci` runs it too.
-`just lint-sh` shellchecks it with the other shell scripts.
+[`smoke_herdr_send.sh`](smoke_herdr_send.sh) exercises every herdr_send command, flag, and exit code end to end using a fake herdr stub on PATH, including waiting, saved messages, and `pending`, with saved messages kept in its temporary directory.
+Run it with `just smoke-herdr-send`; `just ci` runs it too.
+`just lint-sh` shellchecks both smoke test scripts with the other shell scripts.
 
 Installer regression tests cover original settings preservation, timestamped backups, repeated runs, and dry runs using temporary homes rather than the real user configuration.
 Hermes tests use an offline CLI double to cover profile selection, external-directory registration, read/write failures, and preservation of local skills and identity.

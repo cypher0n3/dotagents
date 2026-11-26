@@ -24,6 +24,7 @@ wip/
 *.bak
 *.log
 *.out
+.coverage
 
 # Local environment
 .env*

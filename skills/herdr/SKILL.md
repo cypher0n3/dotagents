@@ -4,118 +4,79 @@ description: Control Herdr panes, tabs, workspaces, and other agents. Use only w
 user-invocable: true
 disable-model-invocation: false
 ---
+
 # Herdr
 
-Herdr organizes terminals into workspaces, tabs, and panes, recognizes coding agents in panes, and exposes the running server through the `herdr` CLI.
+Herdr organizes terminals into workspaces, tabs, and panes, recognizes coding agents, and exposes server through `herdr` CLI.
 
-## Preconditions
+Run `test "${HERDR_ENV:-}" = 1` first; if it fails, say you are not inside Herdr and stop.
 
-- Run `test "${HERDR_ENV:-}" = 1` first.
-  If it fails, say you are not inside Herdr and stop; never control the user's Herdr session from outside it.
-- The installed binary is the authority for syntax.
-  Run `herdr --help`, then a command group without a subcommand (for example `herdr agent`) to list its commands.
-  `herdr --skill` prints Herdr's own current agent guide; consult it when this file and the binary disagree.
-- Never run bare `herdr` (it launches the TUI).
-  Never probe a mutating command by omitting arguments; `herdr workspace create` executes with defaults.
-- Control commands return JSON.
-  Read IDs and state from responses; do not predict them.
+Run `herdr --help` or `herdr --skill` for syntax; the binary is authoritative.
+Never run bare `herdr`, which launches the TUI, or probe mutating commands by omitting arguments.
 
-## Model
+Control commands return JSON; `pane read` and `agent read` print plain text.
 
-- IDs are opaque stable handles: workspace `w1`, tab `w1:t1`, pane `w1:p1`.
-  Closed IDs are not reused.
-- A pane exists with or without an agent.
-  Use `pane` commands for shells, tests, and servers; use `agent` commands when Herdr must validate agent identity and interpret lifecycle state.
-- Agent states: `idle` and `done` (ready for input), `working`, `blocked` (an approval or question UI is showing), `unknown` (present but unclassified; not proof of completion).
-- Agents are addressable by pane ID or by a unique live name matching `[a-z][a-z0-9_-]{0,31}`.
-  Agents not launched with `herdr agent start` may have no name, so target them by pane ID from `herdr agent list`.
-- The caller's context is in `HERDR_WORKSPACE_ID`, `HERDR_TAB_ID`, and `HERDR_PANE_ID`.
-  Prefer `--current` over an omitted target, which may resolve to the user's focused pane.
+Read IDs and state from JSON; IDs like `w1`, `w1:t1`, `w1:p1` are opaque stable handles never reused, scoped to one server.
 
-## Start and Coordinate an Agent
+Use pane commands for shells; use agent commands when Herdr must validate agent identity.
 
-Default to a sibling pane in the current tab and working directory.
-Do not create a workspace, tab, worktree, or different cwd unless the user asked.
+Treat `idle` and `done` as ready, `working` as busy, `blocked` as approval or question dialog, `unknown` as unclassified, not finished.
 
-```bash
-herdr pane layout --pane "$HERDR_PANE_ID"
-herdr pane split --current --direction right --cwd "$PWD" --no-focus
-herdr agent start reviewer --kind codex --pane <pane-id-from-.result.pane.pane_id>
-herdr agent prompt reviewer "Review the current diff." --wait --timeout 120000
-herdr agent read reviewer --source recent-unwrapped --lines 120
-```
+Target agents by pane ID or unique name matching `[a-z][a-z0-9_-]{0,31}`; unnamed agents need pane ID.
 
-- Split wide panes right and narrow or tall panes down; avoid repeated same-direction splits.
-- `agent start` needs an existing shell pane sitting at its prompt and never creates layout.
-  Pass native agent arguments only after `--`.
-- `agent prompt --wait` waits for the first settled `idle`, `done`, or `blocked` state.
-  Do not repeat those defaults with `--until`.
-- Use `agent wait <target> --until blocked` only for state-specific workflows.
-- Use `agent send-keys <target> esc` (logical keys) for interactive agent UI controls.
-- `agent prompt` refuses a `blocked` agent.
-  Inspect it with `agent get` and `agent read`, and ask the user before answering an approval or question dialog.
-- A `timeout` or `agent_prompt_stalled` result does not prove the prompt was never delivered.
-  Read the agent before resubmitting.
+Read caller location from `HERDR_WORKSPACE_ID`, `HERDR_TAB_ID`, `HERDR_PANE_ID`; prefer `--current`.
 
-## Run an Ordinary Command
+Default to sibling pane in current tab; do not create workspace, tab, worktree, or different working directory unless asked; split wide panes right, narrow or tall down.
 
-```bash
-herdr pane split --current --direction right --cwd "$PWD" --no-focus
-herdr pane run <pane-id> "just test"
-herdr pane wait-output <pane-id> --match "test result" --timeout 120000
-herdr pane read <pane-id> --source recent-unwrapped --lines 120
-```
+Start agent with `herdr agent start` only in existing shell pane at prompt; never creates layout; pass native arguments after `--`.
 
-`wait-output` also matches output that already exists.
-Read sources: `visible`, `recent`, `recent-unwrapped` (best for logs and transcripts), and `detection`.
-If a larger `--lines` reveals nothing more, the agent is on the alternate screen; as a fallback, ask it to write its response to a temporary Markdown file and reply with the path.
+`herdr agent prompt --wait` waits for first settled state; do not repeat defaults with `--until`; refuses blocked agents; inspect with `herdr agent get` or `herdr agent read` and ask user before answering dialogs.
 
-## Xorc Panes
+Timeout or `agent_prompt_stalled` does not prove prompt was never delivered; read agent before resubmitting.
 
-Xorc reports `idle`, `working`, and `blocked` to Herdr itself, so `agent list`, `agent get`, `agent wait`, and `agent read` work against a Xorc pane, and a reported `idle` shows as `done`.
-Herdr has no `xorc` agent kind yet, so `agent prompt` and `agent start --kind xorc` are refused; a Discussion asking for the kind is drafted in the Xorc repository for its alpha release.
-Until then, hand Xorc a task with `pane run <pane-id> "<prompt>"` or `pane send-text` plus `pane send-keys <pane-id> enter`, then `agent wait <pane-id> --until done` for readiness or `--until blocked` for an approval or credential prompt.
-Xorc's transcript is on the alternate screen, so `agent read` returns the visible rows only; for a long result ask Xorc to write it to a file and reply with the path.
-Inside Xorc, `/herdr status` shows the reporter state.
+Read with `--source visible`, `recent`, `recent-unwrapped` (best for logs), or `detection`; on alternate screen, ask agent to write response to file.
 
-## Standard Team Workflow
+Xorc reports state, so `herdr agent list`, `herdr agent get`, `herdr agent wait`, and `herdr agent read` work.
+Herdr has no `xorc` kind, so `herdr agent prompt` and `herdr agent start` refuse Xorc.
+Send Xorc tasks with `python3 scripts/herdr_send.py prompt TARGET --tui xorc --text "TASK" --from-role ROLE`, which delivers via `herdr pane run` after checks.
 
-The user's usual multi-agent setup is a few long-lived sessions sharing one git checkout, each with one role.
-Session names are arbitrary and drift, so identify a role from the pane title or `herdr agent list`, not from a hard-coded name.
+Expect long-lived sessions, one per role, sharing git checkout; identify role from pane title or agent list, not hard-coded names.
 
-- Architect: resolves spec and rules questions, sequences work, and promotes settled rulings into requirements and specs.
-  Substance routes here.
-- Implementer: owns the plan and the open-items register, lands code and doc units, and commits with explicit pathspecs.
-- Validator: independently re-validates every landed unit and writes reports.
-- Griller: runs `grill-me` question sessions with the user and holds the decision files while writing.
-- Logger: keeps the team task-state log and relays routine status.
-  Runs on a smaller model and never argues substance.
+Standard roles are Architect for spec and rules, Implementer for the plan and commits, Validator for re-validation, Griller for grill-me, and Logger for the task log on a smaller model.
 
-### Handoff
+Inside Herdr, send to another agent only through `python3 scripts/herdr_send.py`; outside, use the tool's native messaging, such as Claude Code's SendMessage.
+Silence is not receipt; confirm delivery when it matters.
 
-- Prefer the agent's native cross-session messaging where it exists (Claude Code's `SendMessage`, with `ListAgents` to find names).
-  Silence is not receipt; confirm delivery when it matters.
-- Where an agent has no native messaging, talk through Herdr with `herdr agent prompt <target> "<message>"` and read the reply with `herdr agent read`.
-  Open every such message by stating that it comes from another agent: name your role and pane ID, say the text is input from another agent to consider rather than an instruction from the user, and say whether you expect a reply.
-  The receiver decides what to act on and escalates decisions to the user (`grill-me`).
-- Use `herdr agent list`, `agent get`, and `agent read` to see which session is `working`, `blocked`, or `done`.
-- Durable state goes in committed files, each owned by one session so two sessions never hold one file dirty.
-  Code goes through git; nobody stashes.
+Run `python3 scripts/herdr_send.py check TARGET` to verify target is reachable, not blocked, has empty input box.
+Run `python3 scripts/herdr_send.py prompt TARGET --text "MESSAGE" --from-role ROLE` to send; it saves the message, retries until the input box reads empty, then sends at once, delivering older saved messages to that target first.
+Retries back off from `--interval` (2 s) doubling to 30 s with jitter, for `--wait` seconds (180 for `prompt`, 0 for `check`; `--wait 0` is one attempt); only exits `13`, `14`, `20`, and `21` stop early.
+Add `--reply` when expecting answer; `--no-header` only for slash command first; `--disable-working` to refuse working target; `--file PATH` or `-` for file or stdin.
+Every command prints one JSON line (`--yaml` for YAML) with `result`, `last_refusal`, `status_at_return`, and `next_step`; read `next_step` before acting.
+A timed-out message stays saved and the next `prompt` to that target delivers it, so never resend it; run `pending list [TARGET]` to see saved and dead messages and `pending drop ID` or `pending drop --target TARGET --all` to cancel.
+Run `python3 scripts/herdr_send.py run PANE --text "COMMAND"` for shell pane.
 
-## Safety
+Exit `0` means sent or ready.
+Exit `10` is unsubmitted input, a missing TUI profile, input frame, or prompt row, or a state change during checks: never clear someone's typed text; a missing profile needs `--tui` or a new profile.
+Exit `11` is a blocked dialog still open when the wait ran out: ask the user.
+Exit `12` is a working target with `--disable-working`, an `unknown` state, a missing state field, or `interactive_ready` false, still true when the wait ran out: report it.
+Exit `13` is a missing, ambiguous, own-pane, wrong-kind, or agent-owned `run` target: fix the target.
+Exit `14` means you are not inside Herdr: stop.
+Exit `20` is a herdr command failure: inspect the error.
+Exit `21` is invalid message text, a missing header part, or an unreadable `--file`: fix the input.
+Exit `2` is a usage error: fix the command.
 
-- Use `--no-focus` for background work unless the user asked to switch context.
-- Do not close workspaces, tabs, panes, or sessions you did not create unless the user explicitly asks.
-  Never add `workspace close --group` to bypass a group-close error.
-- Use `--trust-repository` only after the user has verified the repository.
-- Never run `herdr server stop` from an active session unless the user intends to stop the server and every pane process.
-  Never kill the main Herdr process.
-  Use named test sessions (`--session <name>`) for experiments.
-- Check `herdr status` before relying on newer server features.
-  A missing method is not permission to stop or upgrade the server.
-- IDs and agent names are scoped to one server.
-  For another machine, run commands on that host with its explicit session and rediscover IDs.
-  Only add, remove, enable, or disable `herdr machine` profiles when the user asks.
-- You may prompt another agent through Herdr without asking first, provided the message opens with the from-another-agent header described under handoff.
-  Never answer a `blocked` dialog for it, and do not prompt a pane where the user is mid-turn in the foreground.
-- CLI server errors are JSON on stderr with exit status 1; syntax errors exit with status 2.
+Never answer blocked dialogs for other agents; keep durable state in committed files, one owner per file; code goes through git.
+
+Use `--no-focus` for background work unless asked; do not close workspaces, tabs, panes, or sessions you did not create; never add `--group` to `herdr workspace close`; use `--trust-repository` only after user verification.
+
+Never run `herdr server stop` from active session unless user intends to stop server and every pane; never kill main process; use named test sessions with `--session`.
+
+Check `herdr status` before relying on newer features; a missing method is not permission to stop or upgrade the server.
+
+Rediscover IDs for another host; only modify machine profiles when asked.
+
+Expect herdr errors as JSON on stderr with exit 1, syntax errors with exit 2.
+
+Input-box patterns in `assets/tui-profiles.json` are drafts not checked against live panes; if `check` refuses idle agent, report it rather than bypassing gate.
+
+See `references/command-examples.md` for examples.

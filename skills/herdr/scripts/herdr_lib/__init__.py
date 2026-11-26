@@ -1,0 +1,1 @@
+"""Herdr safe-send library."""

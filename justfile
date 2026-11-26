@@ -22,7 +22,7 @@ setup: install-markdownlint venv
 
 # Local CI: everything that gates a merge in this repository. Agents are
 # generated first, so every later check sees the current generated files.
-ci: generate-agents docs-check validate-skills validate-agents validate-skills-spec lint-python test-python smoke-todos test-powershell lint-sh
+ci: generate-agents docs-check validate-skills validate-agents validate-skills-spec lint-python test-python smoke-todos smoke-herdr-send test-powershell lint-sh
     @:
 
 # Generate every tool's agent files from agent_sources/ into generated/, which is not committed.
@@ -300,6 +300,10 @@ test-powershell-readonly:
 # Run every task-management CLI command end to end against a temporary file.
 smoke-todos:
     .ci_scripts/smoke_todos.sh
+
+# Run every herdr_send command, flag, and exit code end to end using a fake herdr stub.
+smoke-herdr-send:
+    .ci_scripts/smoke_herdr_send.sh
 
 # Lint the repository's shell scripts (shellcheck). Skipped with a notice when shellcheck is absent.
 lint-sh:

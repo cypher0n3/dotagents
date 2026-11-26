@@ -1,0 +1,13 @@
+"""Exit codes for herdr_send.py."""
+
+from __future__ import annotations
+
+EXIT_SUCCESS = 0
+EXIT_USAGE_ERROR = 2
+EXIT_BUSY = 10
+EXIT_BLOCKED = 11
+EXIT_WORKING_REFUSED = 12
+EXIT_TARGET_ERROR = 13
+EXIT_NOT_IN_HERDR = 14
+EXIT_HERDR_ERROR = 20
+EXIT_INVALID_INPUT = 21
